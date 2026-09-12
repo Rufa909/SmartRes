@@ -1,0 +1,65 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-smartres}
+      MYSQL_USER: ${MYSQL_USER:-smartres}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-smartres_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+    env_file:
+      - .env
+    ports:
+      - "${API_PORT:-4000}:4000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai-service:
+    build:
+      context: ./apps/ai-service
+    env_file:
+      - .env
+    ports:
+      - "${AI_SERVICE_PORT:-8000}:8000"
+
+  web:
+    build:
+      context: ./apps/web
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:${API_PORT:-4000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+volumes:
+  mysql-data:
+
