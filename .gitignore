@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 .env
+.env.mysql.local
 .venv/
 __pycache__/
 *.pyc

@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import { z } from "zod";
+import { fileURLToPath } from "node:url";
 
+dotenv.config({ path: fileURLToPath(new URL('../../../../.env.mysql.local', import.meta.url)) });
 dotenv.config({ path: "../../.env" });
 dotenv.config();
 

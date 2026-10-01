@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "db:staff": "node scripts/setup-staff-db.mjs",
+    "dev:staff": "tsx watch src/staff-server.ts",
+    "test:staff": "tsx --test scripts/staff.integration.test.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
