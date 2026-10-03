@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import 'staff_api.dart';
 import 'kitchen_page.dart';
-import 'kitchen_page.dart';
 
 const staffGreen = Color(0xFF176B53);
 String staffMoney(num value) =>
@@ -47,10 +46,11 @@ class _StaffPageState extends State<StaffPage> {
     super.initState();
     api = widget.api ?? StaffApi();
     refresh();
-    if (widget.autoRefresh)
+    if (widget.autoRefresh) {
       timer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (!busy) refresh();
       });
+    }
   }
 
   @override
@@ -90,9 +90,10 @@ class _StaffPageState extends State<StaffPage> {
           .showSnackBar(SnackBar(content: Text(message)));
       await refresh();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -145,15 +146,10 @@ class _StaffPageState extends State<StaffPage> {
           IconButton(
             tooltip: 'Mở màn hình bếp',
             onPressed: () async {
-              await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const KitchenPage()));
-              if (mounted) await refresh();
-            },
-            icon: const Icon(Icons.soup_kitchen_outlined),
-          ),
-          IconButton(
-            tooltip: 'Mở màn hình bếp',
-            onPressed: () async {
-              await Navigator.push<void>(context, MaterialPageRoute(builder: (_) => const KitchenPage()));
+              await Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => const KitchenPage()),
+              );
               if (mounted) await refresh();
             },
             icon: const Icon(Icons.soup_kitchen_outlined),
@@ -494,11 +490,12 @@ class _StaffPageState extends State<StaffPage> {
         ),
       ),
     );
-    if (selected != null && mounted)
+    if (selected != null && mounted) {
       await mutate(
         () => api.seat(t['id'] as int, selected),
         'Đã nhận bàn ${t['code']}.',
       );
+    }
   }
 
   Future<void> chooseDish(Map<String, dynamic> t) async {
@@ -683,8 +680,9 @@ class _OrderSheetState extends State<OrderSheet> {
       );
       Navigator.pop(context, true);
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = '${e.toString()} Giỏ vẫn được giữ để thử lại.');
+      }
     } finally {
       if (mounted) setState(() => sending = false);
     }

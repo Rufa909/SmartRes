@@ -31,7 +31,9 @@ flutter run -d emulator-5554 -t lib/main_staff.dart
 4. Mở lại app hoặc bấm Tải lại: bàn và đơn vẫn còn.
 5. Khi bếp cập nhật món sang `completed`, nhân viên có thể xác nhận phục vụ; API lưu `served` và `served_at`.
 
-Chưa có màn hình bếp cập nhật `completed`, thu ngân chốt thanh toán/giải phóng bàn, hoặc đăng nhập. App tải lại dữ liệu mỗi 5 giây và có nút làm mới. Luồng này chưa dùng WebSocket.
+Đã có màn hình bếp: mở bằng nút bếp trên app nhân viên, bấm Bắt đầu nấu rồi Hoàn thành món. Bếp tải lại mỗi 3 giây; nhân viên mỗi 5 giây và có nút làm mới. Chưa có thu ngân chốt thanh toán/giải phóng bàn hoặc đăng nhập. Luồng này chưa dùng WebSocket.
+
+Xem hướng dẫn và nhật ký tất cả các chặng tại [HUONG_DAN_VA_NHAT_KY_CAC_CHANG.md](../HUONG_DAN_VA_NHAT_KY_CAC_CHANG.md).
 
 ## Xem trong MySQL Workbench
 
