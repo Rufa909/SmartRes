@@ -9,6 +9,7 @@
 body {
   background: #f7f8f5;
   color: #17201c;
+  margin: 0;
 }
 
 button,
@@ -16,5 +17,17 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 

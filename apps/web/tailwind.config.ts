@@ -8,7 +8,8 @@ const config: Config = {
         ink: "#17201c",
         leaf: "#2f6f4e",
         saffron: "#d58a1f",
-        mist: "#eef3ef"
+        mist: "#eef3ef",
+        coral: "#ff5948"
       }
     }
   },
