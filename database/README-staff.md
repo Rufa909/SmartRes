@@ -21,7 +21,7 @@ cd D:\DoAn4\SmartRes\smartresapp
 flutter run -d emulator-5554 -t lib/main_staff.dart
 ```
 
-`adb reverse` nối localhost:4000 của Android đến máy tính; chạy lại sau khi khởi động máy ảo. Nếu ID thiết bị khác, xem `flutter devices`. Bản debug cho phép HTTP tới localhost. Bản phát hành cần HTTPS và đăng nhập/phân quyền.
+Từ bản giao diện Figma ngày 07/10, Android mặc định dùng `10.0.2.2:4000` để nối máy tính từ máy ảo; lệnh `adb reverse` ở trên không còn bắt buộc. Nếu ID thiết bị khác, xem `flutter devices`. Với thiết bị thật và adb reverse, truyền `--dart-define=STAFF_API_URL=http://127.0.0.1:4000`. Bản debug cho phép HTTP tới localhost và địa chỉ máy ảo này. Bản phát hành cần HTTPS và đăng nhập/phân quyền.
 
 ## Thử dữ liệu
 

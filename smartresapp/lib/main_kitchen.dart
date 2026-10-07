@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'kitchen_page.dart';
+import 'restaurant_theme.dart';
 
 void main() => runApp(
-  const MaterialApp(
+  MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'SmartRes Bếp',
-    home: KitchenPage(),
+    theme: restaurantTheme(),
+    home: const KitchenPage(),
   ),
 );

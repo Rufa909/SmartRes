@@ -8,6 +8,93 @@ import 'package:smartresapp/kitchen_page.dart';
 import 'package:smartresapp/staff_api.dart';
 
 void main() {
+  testWidgets('Lọc bàn, đếm phần và khóa thao tác khi mất kết nối', (
+    tester,
+  ) async {
+    bool offline = false;
+    final client = MockClient((req) async {
+      if (offline) return http.Response('{"message":"Mất kết nối"}', 503);
+      return http.Response(
+        jsonEncode({
+          'items': [
+            {
+              'id': 1,
+              'tableCode': 'A01',
+              'name': 'Cơm',
+              'quantity': 2,
+              'status': 'preparing',
+              'orderCode': 'ONE',
+              'createdAt': '2026-10-07T00:00:00Z',
+            },
+            {
+              'id': 2,
+              'tableCode': 'B01',
+              'name': 'Trà',
+              'quantity': 3,
+              'status': 'preparing',
+              'orderCode': 'TWO',
+              'createdAt': '2026-10-07T00:01:00Z',
+            },
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    addTearDown(client.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: KitchenPage(api: StaffApi(client: client), autoRefresh: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('5 phần · 2 dòng món'), findsOneWidget);
+    await tester.tap(find.text('Tất cả bàn'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Lọc bàn A01').last);
+    await tester.pumpAndSettle();
+    expect(find.text('2 phần · 1 dòng món'), findsOneWidget);
+    expect(find.text('3 × Trà'), findsNothing);
+    offline = true;
+    await tester.tap(find.byTooltip('Tải lại bếp'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Bắt đầu nấu'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('2 × Cơm'), findsOneWidget);
+    offline = false;
+    await tester.tap(find.text('Thử lại'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Bắt đầu nấu'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('Lần tải đầu thất bại không báo hàng đợi trống', (tester) async {
+    final client = MockClient(
+      (_) async => http.Response('{"message":"Offline"}', 503),
+    );
+    addTearDown(client.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: KitchenPage(api: StaffApi(client: client), autoRefresh: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Chưa xác nhận được danh sách món'), findsOneWidget);
+    expect(find.text('Chưa có món chờ bếp'), findsNothing);
+  });
+
   testWidgets('Bếp bắt đầu nấu rồi hoàn thành qua API', (tester) async {
     String status = 'preparing';
     final client = MockClient((req) async {
@@ -45,6 +132,8 @@ void main() {
     await tester.tap(find.text('Bắt đầu nấu'));
     await tester.pumpAndSettle();
     expect(status, 'cooking');
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Đang nấu (1)'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Hoàn thành món'));

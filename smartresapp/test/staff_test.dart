@@ -6,8 +6,18 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:smartresapp/staff_api.dart';
 import 'package:smartresapp/staff_page.dart';
+import 'package:smartresapp/ready_alert.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(ReadyAlert.channel, (_) async => true),
+  );
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(ReadyAlert.channel, null),
+  );
   testWidgets('Nhận dữ liệu server và xác nhận phục vụ qua API', (
     tester,
   ) async {

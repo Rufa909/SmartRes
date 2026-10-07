@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:http/http.dart' as http;
 
 String newRequestId() {
@@ -15,13 +17,17 @@ String newRequestId() {
 class StaffApi {
   final http.Client client;
   final String baseUrl;
-  StaffApi({
-    http.Client? client,
-    this.baseUrl = const String.fromEnvironment(
-      'STAFF_API_URL',
-      defaultValue: 'http://127.0.0.1:4000',
-    ),
-  }) : client = client ?? http.Client();
+  StaffApi({http.Client? client, String? baseUrl})
+    : client = client ?? http.Client(),
+      baseUrl = baseUrl ?? defaultBaseUrl;
+
+  static String get defaultBaseUrl {
+    const configured = String.fromEnvironment('STAFF_API_URL');
+    if (configured.isNotEmpty) return configured;
+    return !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? 'http://10.0.2.2:4000'
+        : 'http://127.0.0.1:4000';
+  }
 
   Future<Map<String, dynamic>> request(
     String path, [

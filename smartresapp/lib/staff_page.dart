@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 
 import 'staff_api.dart';
 import 'kitchen_page.dart';
+import 'restaurant_theme.dart';
+import 'order_catalogue.dart';
+import 'ready_alert.dart';
 
-const staffGreen = Color(0xFF176B53);
+const staffGreen = brandOrange;
 String staffMoney(num value) =>
     '${value.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ';
 String tableStatus(String s) => switch (s) {
@@ -37,6 +40,11 @@ class _StaffPageState extends State<StaffPage> {
   String area = 'Tất cả';
   bool initialLoading = true, refreshing = false, busy = false;
   String? error;
+  final readyTracker = ReadyTracker();
+  final alert = ReadyAlert();
+  bool soundEnabled = true;
+  String? alertMessage;
+  String tableQuery = '';
   List<Map<String, dynamic>> tables = [], menu = [], items = [];
   List<Map<String, dynamic>> get ready =>
       items.where((i) => i['status'] == 'completed').toList();
@@ -45,12 +53,33 @@ class _StaffPageState extends State<StaffPage> {
   void initState() {
     super.initState();
     api = widget.api ?? StaffApi();
-    refresh();
+    unawaited(startAlerts());
     if (widget.autoRefresh) {
       timer = Timer.periodic(const Duration(seconds: 5), (_) {
         if (!busy) refresh();
       });
     }
+  }
+
+  Future<void> startAlerts() async {
+    final enabled = await alert.enabled();
+    if (!mounted) return;
+    setState(() => soundEnabled = enabled);
+    await refresh();
+  }
+
+  Future<void> testSound() async {
+    final played = await alert.play();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          played
+              ? 'Đã phát âm thử. Âm lượng phụ thuộc mức thông báo của thiết bị.'
+              : 'Thiết bị này chưa phát được âm báo.',
+        ),
+      ),
+    );
   }
 
   @override
@@ -66,12 +95,26 @@ class _StaffPageState extends State<StaffPage> {
     try {
       final data = await api.snapshot();
       if (!mounted) return;
+      final nextItems = (data['items'] as List).cast<Map<String, dynamic>>();
+      final newlyReady = readyTracker.update(nextItems);
       setState(() {
         tables = (data['tables'] as List).cast<Map<String, dynamic>>();
         menu = (data['menu'] as List).cast<Map<String, dynamic>>();
-        items = (data['items'] as List).cast<Map<String, dynamic>>();
+        items = nextItems;
+        if (newlyReady.isNotEmpty) {
+          alertMessage =
+              'Bếp đã xong ${newlyReady.length} dòng món · Bàn ${newlyReady.map((i) => i['tableCode']).toSet().join(', ')}';
+        }
         error = null;
       });
+      if (newlyReady.isNotEmpty && soundEnabled) {
+        final played = await alert.play();
+        if (mounted && !played) {
+          setState(
+            () => alertMessage = '$alertMessage · Không phát được âm thanh',
+          );
+        }
+      }
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     } finally {
@@ -107,14 +150,10 @@ class _StaffPageState extends State<StaffPage> {
 
   @override
   Widget build(BuildContext context) => Theme(
-    data: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: staffGreen),
-      scaffoldBackgroundColor: const Color(0xFFF5F7F6),
-    ),
+    data: restaurantTheme(),
     child: Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF5F7F6),
+        backgroundColor: Colors.white,
         toolbarHeight: 76,
         title: const Row(
           children: [
@@ -173,6 +212,21 @@ class _StaffPageState extends State<StaffPage> {
       body: Column(
         children: [
           if (busy) const LinearProgressIndicator(),
+          if (alertMessage != null && ready.isNotEmpty)
+            MaterialBanner(
+              backgroundColor: const Color(0xFFFFEEE9),
+              content: Text(alertMessage!),
+              leading: const Icon(Icons.room_service, color: brandOrange),
+              actions: [
+                TextButton(
+                  onPressed: () => setState(() {
+                    tab = 1;
+                    alertMessage = null;
+                  }),
+                  child: const Text('Xem món'),
+                ),
+              ],
+            ),
           if (error != null)
             MaterialBanner(
               content: Text('$error Dữ liệu đang hiển thị có thể đã cũ.'),
@@ -284,6 +338,14 @@ class _StaffPageState extends State<StaffPage> {
                   .toList(),
         ),
         const SizedBox(height: 12),
+        TextField(
+          onChanged: (value) => setState(() => tableQuery = value),
+          decoration: const InputDecoration(
+            prefixIcon: Icon(Icons.search),
+            hintText: 'Tìm bàn, ví dụ A03',
+          ),
+        ),
+        const SizedBox(height: 12),
         const Text(
           'Chọn bàn để nhận khách hoặc gọi thêm món.',
           style: TextStyle(fontSize: 12, color: Colors.black54),
@@ -297,7 +359,11 @@ class _StaffPageState extends State<StaffPage> {
         LayoutBuilder(
           builder: (context, size) {
             final visible = tables
-                .where((t) => area == 'Tất cả' || t['area'] == area)
+                .where(
+                  (t) =>
+                      (area == 'Tất cả' || t['area'] == area) &&
+                      matchesSearch(t['code'] as String, tableQuery),
+                )
                 .toList();
             return GridView.builder(
               shrinkWrap: true,
@@ -499,11 +565,11 @@ class _StaffPageState extends State<StaffPage> {
   }
 
   Future<void> chooseDish(Map<String, dynamic> t) async {
-    final sent = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => OrderSheet(table: t, menu: menu, api: api),
+    final sent = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrderSheet(table: t, menu: menu, api: api),
+      ),
     );
     if (sent == true && mounted) {
       await refresh();
@@ -593,7 +659,29 @@ class _StaffPageState extends State<StaffPage> {
   );
   Widget profileView() => ListView(
     padding: const EdgeInsets.all(24),
-    children: const [
+    children: [
+      SwitchListTile(
+        title: const Text('Âm báo món hoàn thành'),
+        subtitle: const Text(
+          'Báo 3 tiếng khi có món mới sẵn sàng, trong lúc app đang mở.',
+        ),
+        value: soundEnabled,
+        onChanged: (v) async {
+          await alert.setEnabled(v);
+          if (mounted) setState(() => soundEnabled = v);
+        },
+      ),
+      OutlinedButton.icon(
+        onPressed: testSound,
+        icon: const Icon(Icons.volume_up),
+        label: const Text('Thử âm báo'),
+      ),
+      const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          'Tăng âm lượng thông báo trên thiết bị để nghe rõ. Chưa hỗ trợ báo khi đóng app hoặc khóa màn hình.',
+        ),
+      ),
       CircleAvatar(
         radius: 42,
         backgroundColor: staffGreen,
@@ -691,100 +779,15 @@ class _OrderSheetState extends State<OrderSheet> {
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !sending,
-    child: SafeArea(
-      child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * .8,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Gọi món · Bàn ${widget.table['code']}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ListView(
-                  children: widget.menu.map((m) {
-                    final id = m['id'] as int;
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${m['emoji']} ${m['name']}',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(staffMoney(m['price'] as num)),
-                                ),
-                                if (m['available'] == true) ...[
-                                  IconButton(
-                                    tooltip: 'Giảm ${m['name']}',
-                                    onPressed: sending
-                                        ? null
-                                        : () => change(id, -1),
-                                    icon: const Icon(
-                                      Icons.remove_circle_outline,
-                                    ),
-                                  ),
-                                  Text('${cart[id] ?? 0}'),
-                                  IconButton(
-                                    tooltip: 'Thêm ${m['name']}',
-                                    onPressed: sending
-                                        ? null
-                                        : () => change(id, 1),
-                                    icon: const Icon(Icons.add_circle_outline),
-                                  ),
-                                ] else
-                                  const Text(
-                                    'Hết món',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              if (error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    error!,
-                    style: const TextStyle(color: Colors.red),
-                  ),
-                ),
-              Text(
-                'Tạm tính: ${staffMoney(total)}',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: sending || cart.isEmpty ? null : send,
-                child: Text(sending ? 'Đang gửi…' : 'Gửi đơn gọi món'),
-              ),
-            ],
-          ),
-        ),
-      ),
+    child: OrderCatalogue(
+      table: widget.table,
+      menu: widget.menu,
+      cart: cart,
+      sending: sending,
+      error: error,
+      total: total,
+      change: change,
+      send: send,
     ),
   );
 }

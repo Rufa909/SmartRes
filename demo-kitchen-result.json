@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-07T13:32:46.332Z",
+  "checks": [
+    "Đặt món bàn A01: 2 cơm + 1 trà, 115000 đồng. Gửi lại không trùng đơn.",
+    "Chặn phục vụ sớm và chặn bỏ qua bước nấu: HTTP 409.",
+    "Bếp: cả hai dòng món đang nấu.",
+    "Bếp: hoàn thành, chờ nhân viên phục vụ.",
+    "Đã phục vụ; xác nhận lại an toàn; không thể chuyển món đã phục vụ về nấu.",
+    "Đọc trực tiếp MySQL: 2 dòng món đã phục vụ, có thời điểm served_at."
+  ],
+  "table": "A01",
+  "requestId": "5f59548a-d315-42d8-8c71-0da022f887a8",
+  "orderCode": "SR-fb15869c-159e-4380-a21d-6962531416c8",
+  "totalAmount": 115000,
+  "savedItems": [
+    {
+      "item_name": "Cơm chiên hải sản",
+      "quantity": 2,
+      "status": "served",
+      "served_at": "2026-10-07T13:33:22.000Z"
+    },
+    {
+      "item_name": "Trà đào cam sả",
+      "quantity": 1,
+      "status": "served",
+      "served_at": "2026-10-07T13:33:22.000Z"
+    }
+  ],
+  "success": true
+}

@@ -1,6 +1,6 @@
 # SmartRes — Hướng dẫn và nhật ký các chặng
 
-Cập nhật: **03/10/2026**. Tài liệu dành cho bạn bắt đầu từ chưa biết Flutter. Số chặng dưới đây được thống nhất theo các phần đã làm trong thư mục dự án.
+Cập nhật: **07/10/2026**. Tài liệu dành cho bạn bắt đầu từ chưa biết Flutter. Số chặng dưới đây được thống nhất theo các phần đã làm trong thư mục dự án.
 
 ## 1. Dự án hiện tại là gì?
 
@@ -105,6 +105,37 @@ Màn hình bếp tải lại mỗi **3 giây**, nhân viên mỗi **5 giây**, �
 
 Ngày 03/10/2026: dọn phần import/nút bếp bị lặp, chuẩn hóa định dạng Flutter, hoàn thiện kiểm tra và tổng hợp tài liệu này.
 
+### Bổ sung chặng bếp ngày 07/10/2026
+
+**Đã làm trong lần cập nhật này:**
+
+- Thêm bộ lọc **Tất cả bàn / Lọc bàn A01…**. Danh sách và số đếm ở các nhóm trạng thái cùng tuân theo bàn đang chọn. Vẫn giữ lựa chọn khi món cuối của bàn đã được phục vụ để người dùng không bị chuyển sang bàn khác bất ngờ.
+- Hiện **số phần và số dòng món** theo trạng thái và bàn đang xem. Ví dụ một dòng `2 × Cơm` là 2 phần nhưng chỉ 1 dòng món; số trong các nút nhóm là số dòng, không phải số phần.
+- Hiện giờ đồng bộ thành công gần nhất. Nếu tải thất bại, giờ này giữ nguyên để biết dữ liệu đang cũ.
+- Khi mất kết nối, giữ danh sách đã tải để tham khảo, hiển thị lỗi và khóa Bắt đầu nấu / Hoàn thành món. Nút mở lại sau lần tải thành công, qua tự cập nhật hoặc Thử lại.
+- Nếu lần tải đầu thất bại, hiển thị **Chưa xác nhận được danh sách món** thay vì báo không có món.
+- Cho tiêu đề hàng đợi xuống dòng trên màn hình hẹp.
+- Bổ sung kiểm thử lọc bàn, tổng số phần, mất kết nối, khôi phục và lần tải đầu thất bại.
+
+**Cách thử:** mở bếp từ app nhân viên → chọn bàn trong danh sách thả xuống → chọn Chờ bếp / Đang nấu / Chờ phục vụ → kiểm tra tổng số phần → thao tác nấu như mục 4. Muốn xem mọi bàn, chọn lại Tất cả bàn. Thứ tự ưu tiên vẫn là món nhận trước.
+
+Để thử lỗi mạng trong môi trường phát triển, dừng backend bằng `Ctrl+C`, bấm tải lại bếp và đợi thông báo lỗi. Nút đổi trạng thái phải bị khóa. Khởi động lại backend bằng lệnh bên dưới rồi bấm Thử lại: dữ liệu tải được và nút hoạt động lại. Không cần xóa database.
+
+**Kiểm chứng ngày 07/10/2026:** `flutter analyze` không có vấn đề; toàn bộ 9 kiểm thử Flutter đạt; kiểm thử tích hợp MySQL đạt. Không thay schema hoặc tạo đơn mẫu trong database app. Chức năng mới nằm trong `smartresapp/lib/kitchen_page.dart`, kiểm thử tại `smartresapp/test/kitchen_test.dart`.
+
+Đợt này vẫn dùng tải định kỳ 3 giây, chưa thêm âm thanh, phân quyền bếp hoặc xử lý riêng từng phần trong cùng một dòng món. Bấm Hoàn thành món sẽ hoàn thành toàn bộ số lượng của dòng đó.
+
+**Bản Android ngày 07/10:** đã build thành công APK debug cho máy ảo x64 tại `smartresapp/build/app/outputs/flutter-apk/app-debug.apk`. Lần build nhiều kiến trúc bị chậm ở bước tải thư viện nên đã dừng và chuyển sang đúng kiến trúc máy ảo. Lệnh build:
+
+```powershell
+cd D:\DoAn4\SmartRes\smartresapp
+& C:\flutter\bin\flutter.bat build apk --debug --target-platform android-x64 -t lib/main_staff.dart
+```
+
+APK này dành cho máy ảo x64, không phải bản cài iPhone hay bản ARM cho điện thoại.
+
+**Lần chạy xem thử tiếp theo ngày 07/10:** đã mở `Medium_Phone`, khởi động backend `dev:staff`, nối cổng bằng `adb reverse` và cài/chạy trực tiếp màn hình bếp bằng `flutter run -d emulator-5554 -t lib/main_kitchen.dart`. API health xác nhận `status: ok`, `storage: mysql`. Không tạo thêm đơn mẫu. Màn hình bếp lấy đơn hiện có; muốn nhận bàn/gọi thêm món, chạy lại điểm vào `lib/main_staff.dart` theo mục 3 rồi mở bếp từ app nhân viên. Hai điểm vào dùng cùng ứng dụng Android, không phải hai app cài riêng.
+
 ## 3. Cách mở dự án hằng ngày
 
 ### Bước 1 — Chạy backend ở terminal thứ nhất
@@ -131,15 +162,16 @@ Nếu máy ảo đã mở thì bỏ qua lệnh khởi động, chỉ kiểm tra 
 
 Đợi Android khởi động xong. Thiết bị hiện dùng ID `emulator-5554`; nếu danh sách trả ID khác thì thay trong các lệnh tiếp theo.
 
-### Bước 3 — Nối API và chạy app
+### Bước 3 — Chạy app trên máy ảo (cấu hình mới)
 
 ```powershell
-& 'C:\Users\quang\AppData\Local\Android\sdk\platform-tools\adb.exe' -s emulator-5554 reverse tcp:4000 tcp:4000
 cd D:\DoAn4\SmartRes\smartresapp
 & C:\flutter\bin\flutter.bat run -d emulator-5554 -t lib/main_staff.dart
 ```
 
-`adb reverse` chuyển kết nối cổng 4000 từ Android về backend trên máy tính. Chạy lại sau khi khởi động lại máy ảo. Bản debug cho phép HTTP tới localhost. Cấu hình hiện tại phục vụ phát triển trên máy, chưa phải kết nối cho thiết bị ngoài mạng.
+Từ bản giao diện mới ngày 07/10, Android mặc định gọi `http://10.0.2.2:4000`, địa chỉ máy ảo dùng để truy cập localhost của máy tính. Không cần `adb reverse` cho cấu hình này. Các đoạn nhật ký cũ bên dưới mô tả cách nối cổng của phiên bản trước. Bản debug chỉ cho HTTP tới localhost và `10.0.2.2`; chưa phải cấu hình phát hành. Tham khảo [tài liệu mạng Android Emulator](https://developer.android.com/studio/run/emulator-networking-address).
+
+Nếu chủ động dùng điện thoại Android thật qua USB với API trên máy tính, cần chạy `adb reverse tcp:4000 tcp:4000` và truyền `--dart-define=STAFF_API_URL=http://127.0.0.1:4000` vào lệnh Flutter. Bản triển khai thực tế cần địa chỉ HTTPS riêng.
 
 App có tên **SmartRes Nhân viên**. Mở màn hình bếp bằng biểu tượng bếp ở thanh trên cùng; dùng nút quay lại để trở về nhân viên.
 
@@ -259,6 +291,67 @@ Kiểm thử MySQL tạo database tạm tên ngẫu nhiên `smartres_staff_test_
 Không xóa database để chữa lỗi giao diện hoặc trạng thái; cần tìm nguyên nhân trước để giữ dữ liệu đang có.
 
 ## 9. Các chặng tiếp theo dự kiến
+
+### Giao diện Figma và tiện ích nhân viên/bếp — 07/10/2026
+
+**Thiết kế tham chiếu:** [Menu-e2, màn hình gọi món nhân viên](https://www.figma.com/design/wGOkDL5oGzLiZVmYHdPVf6/Menu-e2?node-id=1-213). Đã đọc được ngữ cảnh thiết kế và ảnh màn hình node `1:213`: màu cam đỏ `#FF5A3C`, nền xám nhạt, thẻ món bo góc hai cột, giỏ hàng nền tối. File còn có sơ đồ bàn `2:4`, bếp `1:315` và các trang chi tiết bếp; công cụ Figma báo hết lượt gói Starter trước khi đọc các màn hình đó. Vì vậy sơ đồ bàn và bếp mới chỉ đồng bộ phong cách, chưa đối chiếu đúng từng chi tiết với các trang Figma này.
+
+**Những gì đã làm:**
+
+- Gọi món mở thành trang đầy đủ, thay cho bảng nhỏ phải kéo lâu. Có bàn/số khách ở đầu, bộ tìm kiếm, danh mục, lưới món và tổng tiền cố định bên dưới.
+- Tìm kiếm không phân biệt hoa thường và dấu tiếng Việt: `com chien`, `tra dao` đều tìm được món tương ứng; các từ có thể không liền nhau.
+- Danh mục lấy từ menu MySQL. Không dùng số lượng 36 món hoặc nhãn Bán chạy giả trong bản thiết kế. Tên món, giá, trạng thái hết món và tổng tiền vẫn dùng dữ liệu thật.
+- Nút Đã chọn lọc giỏ hàng; đổi tìm kiếm/danh mục không làm mất món đã chọn. Gửi lỗi giữ giỏ để thử lại, vẫn giữ cơ chế chống gửi trùng hiện có.
+- Ảnh trong Figma là ảnh ô caro giữ chỗ, không phải ảnh món thật. Đã tải chính ảnh và SVG dấu cộng về `smartresapp/assets/figma`, không dùng URL Figma tạm trong giao diện. Chưa có ảnh từng món trong database.
+- Thêm ô tìm bàn cho nhân viên.
+- Bếp có ô tìm theo tên món/bàn/mã đơn, tìm không dấu; thêm bộ lọc Chờ từ 15 phút và thời gian chờ trên thẻ. Thời gian này tính **từ lúc đặt**, không phải thời gian bắt đầu nấu. Thứ tự vẫn ưu tiên món nhận trước.
+- Thêm thông báo nổi cho nhân viên khi có món hoàn thành, hiển thị bàn cần phục vụ và nút Xem món.
+- Âm báo Android phát ba tiếng cho nhóm món mới phát hiện đã hoàn thành. Theo dõi ID món nên tải lại nhiều lần không phát lặp; khi số món giữ nguyên nhưng có món mới, vẫn báo. Mở lại app sẽ báo một lần cho các món còn chờ phục vụ.
+- Trong Cá nhân có bật/tắt âm báo và Thử âm báo. Lựa chọn bật/tắt lưu trên thiết bị Android. Khi tắt âm, thông báo bằng chữ vẫn hoạt động.
+- Sửa kết nối mặc định của Android sang `10.0.2.2:4000` để tránh lỗi mất `adb reverse` khi mở lại máy ảo trong Android Studio.
+
+**Giới hạn âm thanh:** chỉ triển khai âm báo native Android khi app đang hoạt động. Chưa có push notification hoặc dịch vụ nền đảm bảo thông báo lúc khóa màn hình/đóng app; iPhone/web chưa có âm báo native này. Nhân viên tải dữ liệu mỗi 5 giây, bếp mỗi 3 giây nên có độ trễ vài giây. Mất mạng thì không thể nhận trạng thái mới. Âm lượng thực tế phụ thuộc âm lượng thông báo, chế độ im lặng/Không làm phiền và thiết bị xuất âm. App không tự thay đổi âm lượng hệ thống. Nút thử tiếng xác nhận Android nhận yêu cầu phát, không chứng minh loa đã nghe được. API âm thanh sử dụng [Android ToneGenerator](https://developer.android.com/reference/android/media/ToneGenerator).
+
+**Cách tự thử:**
+
+1. Mở bàn đang phục vụ → Gọi thêm món → gõ `com chien` → thêm món → đổi sang `tra dao` → kiểm tra tổng tiền vẫn gồm món trước.
+2. Bấm Đã chọn để xem giỏ, giảm/thêm số lượng, rồi gửi khi muốn tạo đơn thật.
+3. Cá nhân → Thử âm báo; chỉnh âm lượng thông báo của Android nếu cần. Bật Âm báo món hoàn thành.
+4. Mở bếp → tìm bàn/món → Bắt đầu nấu → Hoàn thành món. Trở lại nhân viên để xem thông báo và món chờ phục vụ. Khi màn hình bếp được mở từ nhân viên, màn hình nhân viên bên dưới vẫn theo dõi dữ liệu.
+5. Bấm tải lại vài lần: cùng món đã báo không phát lại. Bấm Xem món rồi xác nhận phục vụ.
+6. Bộ lọc chờ lâu chỉ hiện món đã đặt ít nhất 15 phút; không sửa thời gian đơn trong database để tạo kết quả giả.
+
+**Mã chính:** `lib/order_catalogue.dart` cho giao diện gọi món; `lib/restaurant_theme.dart` cho màu sắc và tìm kiếm; `lib/ready_alert.dart` cho chống báo trùng/kênh âm; `MainActivity.kt` cho âm Android; `staff_page.dart`, `kitchen_page.dart` cho tích hợp. Không thay schema và không tạo đơn demo mới trong lần chỉnh giao diện này.
+
+**Kết quả kiểm tra:** toàn bộ 13 kiểm thử Flutter đạt; `flutter analyze` không có vấn đề; build APK và cài vào máy ảo thành công. Đã quan sát trực tiếp màn hình gọi món với tài nguyên Figma, bộ lọc và thanh giỏ hàng; màn hình Cá nhân báo đã phát âm thử. Đã sửa màu nút gửi khi giỏ trống và áp dụng theme cả cho hộp thoại. Lần chạy cuối Flutter CLI mất kết nối log sau cài đặt; chưa xác nhận lại hình ảnh cuối vì Android Studio đang thu nhỏ. Đã kiểm tra riêng từ bên trong máy ảo tới `10.0.2.2:4000/api/health`, nhận HTTP 200 và `storage: mysql` khi không có `adb reverse`. Kiểm thử âm báo xác nhận gọi kênh native đúng một lần cho mỗi ID mới; chưa có phép đo âm lượng loa thực tế.
+
+### Nhật ký demo thực tế ngày 07/10/2026
+
+**Lần 1 — Demo API:** tạo đơn tại A01, 2 khách, 2 cơm chiên hải sản và 1 trà đào cam sả, tổng 115.000 đồng. Đã đi qua chờ bếp → đang nấu → hoàn thành → đã phục vụ. Đọc trực tiếp MySQL xác nhận hai dòng món có `served_at`. Kiểm tra gửi lại không trùng đơn; phục vụ sớm, bỏ qua bước nấu và đưa món đã phục vụ về nấu đều bị chặn. Kết quả lưu tại `demo-kitchen-result.json`; mã demo tại `apps/api/scripts/demo-kitchen.mjs`. Script này **tạo đơn thật trên bàn trống mỗi lần chạy**, không phải kiểm thử dùng database tạm. Không chạy lại chỉ để đọc kết quả. Lần demo này hoàn tất trong nền khi cuộc trò chuyện bị ngắt; đã kiểm tra lại trước lần tiếp theo.
+
+**Lần 2 — Demo bấm trực tiếp trên app Android trong Android Studio:**
+
+1. Chọn bàn A02 đang trống → Nhận bàn → xác nhận 1 khách.
+2. Gọi thêm món → thêm 1 cơm chiên hải sản 45.000 đồng và 1 trà đào cam sả 25.000 đồng. Giỏ hiển thị 70.000 đồng. Lẩu hết hàng không có nút thêm.
+3. Gửi đơn thành công, mã `SR-9ffdf323-77e2-4a00-9af9-91d0cbd1aaf7`.
+4. Mở bếp → thấy 2 phần / 2 dòng món ở Chờ bếp → bấm Bắt đầu nấu từng món.
+5. Chọn Đang nấu → Hoàn thành món từng dòng → cả hai xuất hiện ở Chờ phục vụ.
+6. Quay lại nhân viên → Xác nhận đã phục vụ từng món. Danh sách đã gọi hiển thị Đã phục vụ, số món chờ về 0.
+7. Về sơ đồ bàn → A02 → Yêu cầu thanh toán. Bàn chuyển sang Chờ thanh toán.
+8. Đọc lại API snapshot đối chiếu: A02 có 1 khách, `waiting_payment`; hai dòng món ID 3 và 4 đều `served`. Đây là dữ liệu thật được giữ lại để xem, chưa thu tiền/chốt hóa đơn.
+
+**Lỗi gặp và đã xử lý:** máy ảo thực tế nằm trong bảng Running Devices của Android Studio, không có cửa sổ Emulator riêng. Sau khi mở lại, `adb reverse --list` không còn cổng 4000; app hiện Không kết nối được máy chủ dù backend vẫn chạy. Chạy lại:
+
+```powershell
+& 'C:\Users\quang\AppData\Local\Android\sdk\platform-tools\adb.exe' -s emulator-5554 reverse tcp:4000 tcp:4000
+& 'C:\Users\quang\AppData\Local\Android\sdk\platform-tools\adb.exe' -s emulator-5554 reverse --list
+```
+
+Sau đó đã quan sát app hiện Đã kết nối dữ liệu và thực hiện toàn bộ demo bằng giao diện. Nếu mở máy ảo hoặc cài/chạy app lại mà mất kết nối, kiểm tra và nối lại cổng sau khi thiết bị đã khởi động. Không cần sửa mật khẩu hay xóa database.
+
+Sau demo đã chạy lại `npm --workspace apps/api run test:staff`: đạt, 1 bài kiểm thử tích hợp gồm nhiều kiểm tra nghiệp vụ, không có lỗi. Bài kiểm thử này dùng database tạm riêng, không thay đổi các đơn demo A01/A02.
+
+### Kế hoạch sau phần bếp
 
 1. **Thu ngân và kết thúc lượt ăn:** tổng hợp các đơn của bàn, lập hóa đơn, xác nhận thanh toán, chống xác nhận hai lần, trả bàn về trống và giữ lịch sử. Chặng này chưa làm.
 2. **Đăng nhập và phân quyền:** nhân viên, bếp, quản lý có quyền API riêng; không chỉ ẩn/hiện nút trên giao diện.

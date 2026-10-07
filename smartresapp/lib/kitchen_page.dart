@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'staff_api.dart';
+import 'restaurant_theme.dart';
 
-const kitchenBlue = Color(0xFF254C76);
+const kitchenBlue = brandOrange;
 
 class KitchenPage extends StatefulWidget {
   final StaffApi? api;
@@ -20,6 +21,15 @@ class _KitchenPageState extends State<KitchenPage> {
   Future<void>? refreshTask;
   bool loading = true, saving = false;
   String filter = 'preparing';
+  String? tableFilter;
+  DateTime? lastSynced;
+  String query = '';
+  bool overdueOnly = false;
+  int age(Map<String, dynamic> item) => DateTime.now()
+      .difference(
+        DateTime.tryParse(item['createdAt'] as String? ?? '') ?? DateTime.now(),
+      )
+      .inMinutes;
   String? error;
   List<Map<String, dynamic>> items = [];
   static const labels = {
@@ -65,6 +75,7 @@ class _KitchenPageState extends State<KitchenPage> {
             );
       setState(() {
         items = next;
+        lastSynced = DateTime.now();
         error = null;
       });
     } catch (e) {
@@ -75,7 +86,7 @@ class _KitchenPageState extends State<KitchenPage> {
   }
 
   Future<void> advance(Map<String, dynamic> item) async {
-    if (saving) return;
+    if (saving || error != null) return;
     setState(() => saving = true);
     try {
       // Hoàn tất lần tải đang chạy trước khi thay đổi, tránh nhận lại ảnh chụp cũ.
@@ -112,13 +123,30 @@ class _KitchenPageState extends State<KitchenPage> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = items.where((i) => i['status'] == filter).toList();
+    final tables = items.map((i) => i['tableCode'] as String).toSet();
+    if (tableFilter != null) tables.add(tableFilter!);
+    final tableCodes = tables.toList()..sort();
+    final scoped = items
+        .where((i) => tableFilter == null || i['tableCode'] == tableFilter)
+        .toList();
+    final visible = scoped
+        .where(
+          (i) =>
+              i['status'] == filter &&
+              matchesSearch(
+                '${i['name']} ${i['tableCode']} ${i['orderCode']}',
+                query,
+              ) &&
+              (!overdueOnly || age(i) >= 15),
+        )
+        .toList();
+    final portions = visible.fold<int>(
+      0,
+      (sum, i) => sum + (i['quantity'] as int),
+    );
+    final sync = lastSynced;
     return Theme(
-      data: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: kitchenBlue),
-        scaffoldBackgroundColor: const Color(0xFFF3F5F8),
-      ),
+      data: restaurantTheme(),
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Bếp • SmartRes'),
@@ -155,11 +183,13 @@ class _KitchenPageState extends State<KitchenPage> {
                         children: [
                           Icon(Icons.soup_kitchen_outlined, color: kitchenBlue),
                           SizedBox(width: 10),
-                          Text(
-                            'Hàng đợi chế biến',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
+                          Expanded(
+                            child: Text(
+                              'Hàng đợi chế biến',
+                              style: TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
                         ],
@@ -169,7 +199,54 @@ class _KitchenPageState extends State<KitchenPage> {
                         'Ưu tiên món nhận trước. Trạng thái tự cập nhật.',
                         style: TextStyle(color: Colors.black54),
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 10),
+                      TextField(
+                        onChanged: (v) => setState(() => query = v),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: 'Tìm món, bàn hoặc mã đơn',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      FilterChip(
+                        label: const Text('Chờ từ 15 phút'),
+                        selected: overdueOnly,
+                        onSelected: (v) => setState(() => overdueOnly = v),
+                      ),
+                      DropdownButton<String>(
+                        isExpanded: true,
+                        value: tableFilter ?? '',
+                        items: [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Tất cả bàn'),
+                          ),
+                          ...tableCodes.map(
+                            (code) => DropdownMenuItem(
+                              value: code,
+                              child: Text('Lọc bàn $code'),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) => setState(
+                          () => tableFilter = value == '' ? null : value,
+                        ),
+                      ),
+                      Text(
+                        '$portions phần · ${visible.length} dòng món',
+                        key: const ValueKey('kitchen-summary'),
+                      ),
+                      Text(
+                        sync == null
+                            ? 'Chưa đồng bộ dữ liệu'
+                            : 'Đồng bộ lúc ${sync.hour.toString().padLeft(2, '0')}:${sync.minute.toString().padLeft(2, '0')}:${sync.second.toString().padLeft(2, '0')}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -179,7 +256,7 @@ class _KitchenPageState extends State<KitchenPage> {
                                   padding: const EdgeInsets.only(right: 8),
                                   child: ChoiceChip(
                                     label: Text(
-                                      '${entry.value} (${items.where((i) => i['status'] == entry.key).length})',
+                                      '${entry.value} (${scoped.where((i) => i['status'] == entry.key).length})',
                                     ),
                                     selected: filter == entry.key,
                                     onSelected: (_) =>
@@ -216,15 +293,21 @@ class _KitchenPageState extends State<KitchenPage> {
                                       ),
                                       const SizedBox(height: 16),
                                       Text(
-                                        'Chưa có món ${labels[filter]!.toLowerCase()}',
+                                        error != null
+                                            ? 'Chưa xác nhận được danh sách món'
+                                            : 'Chưa có món ${labels[filter]!.toLowerCase()}',
+                                        textAlign: TextAlign.center,
                                         style: const TextStyle(
                                           fontSize: 19,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      const Text(
-                                        'Đơn gọi món mới sẽ xuất hiện tại đây.',
+                                      Text(
+                                        error != null
+                                            ? 'Kết nối lại rồi bấm Thử lại.'
+                                            : 'Danh sách theo trạng thái và bàn đang chọn.',
+                                        textAlign: TextAlign.center,
                                       ),
                                     ],
                                   ),
@@ -262,6 +345,14 @@ class _KitchenPageState extends State<KitchenPage> {
                                           ],
                                         ),
                                         const SizedBox(height: 14),
+                                        if (age(item) >= 15)
+                                          Text(
+                                            'Đã chờ ${age(item)} phút từ khi đặt',
+                                            style: const TextStyle(
+                                              color: Color(0xFFB45309),
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
                                         Text(
                                           '${item['quantity']} × ${item['name']}',
                                           style: const TextStyle(
@@ -280,7 +371,7 @@ class _KitchenPageState extends State<KitchenPage> {
                                         const SizedBox(height: 16),
                                         if (item['status'] != 'completed')
                                           FilledButton.icon(
-                                            onPressed: saving
+                                            onPressed: saving || error != null
                                                 ? null
                                                 : () => advance(item),
                                             icon: Icon(
