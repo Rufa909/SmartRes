@@ -225,6 +225,7 @@ Các đường dẫn dưới đây tính từ `D:\DoAn4\SmartRes`:
 | `smartresapp/lib/main_staff.dart` | Khởi động app nhân viên |
 | `smartresapp/lib/staff_page.dart` | Giao diện bàn, gọi món, phục vụ |
 | `smartresapp/lib/kitchen_page.dart` | Hàng đợi và thao tác bếp |
+| `smartresapp/lib/cashier_page.dart` | Hóa đơn chờ thanh toán và xác nhận thu tiền |
 | `smartresapp/lib/staff_api.dart` | Flutter gọi HTTP API |
 | `apps/api/src/staff-server.ts` | Khởi động backend nhân viên/bếp |
 | `apps/api/src/staff-app.ts` | Các API và kiểm tra nghiệp vụ |
@@ -234,6 +235,7 @@ Các đường dẫn dưới đây tính từ `D:\DoAn4\SmartRes`:
 | `apps/api/scripts/setup-staff-db.mjs` | Thiết lập database |
 | `apps/api/scripts/staff.integration.test.ts` | Kiểm tra luồng với MySQL |
 | `smartresapp/test/kitchen_test.dart` | Kiểm tra thao tác bếp và lỗi API |
+| `smartresapp/test/cashier_test.dart` | Kiểm tra hiển thị hóa đơn và chặn thanh toán khi còn món |
 
 Nên đọc theo thứ tự: `main_staff.dart` → `staff_page.dart` → `staff_api.dart` → `staff-app.ts` → schema. Ví dụ khi bấm gửi món: giao diện lấy giỏ → API client gửi JSON → Node.js kiểm tra → MySQL lưu → app nhận kết quả và tải lại danh sách.
 
@@ -248,6 +250,8 @@ Nên đọc theo thứ tự: `main_staff.dart` → `staff_page.dart` → `staff_
 | `POST /api/staff/items/:id/kitchen` | Chuyển sang nấu hoặc hoàn thành |
 | `POST /api/staff/items/:id/serve` | Xác nhận phục vụ |
 | `POST /api/staff/tables/:id/request-payment` | Yêu cầu thanh toán |
+| `GET /api/staff/cashier` | Danh sách hóa đơn đang chờ thu ngân |
+| `POST /api/staff/tables/:id/pay` | Xác nhận thanh toán và trả bàn về trống |
 
 ## 7. Kiểm thử và kết quả
 
@@ -353,10 +357,54 @@ Sau demo đã chạy lại `npm --workspace apps/api run test:staff`: đạt, 1 
 
 ### Kế hoạch sau phần bếp
 
-1. **Thu ngân và kết thúc lượt ăn:** tổng hợp các đơn của bàn, lập hóa đơn, xác nhận thanh toán, chống xác nhận hai lần, trả bàn về trống và giữ lịch sử. Chặng này chưa làm.
+### Chặng thu ngân và kết thúc lượt ăn — 15/10/2026
+
+**Mục tiêu workflow:** `Chờ thanh toán → Thu ngân xem hóa đơn → Chọn phương thức → Xác nhận → Đóng lượt bàn → Bàn trống`.
+
+**Đã triển khai:**
+
+- Bổ sung `payment_method` (`cash`, `bank_transfer`, `card`) và `paid_at` vào bảng `orders`. Script setup có migration lặp an toàn, không xóa dữ liệu cũ.
+- Thêm `GET /api/staff/cashier`: chỉ trả các bàn ở trạng thái `waiting_payment`, cộng tổng các đơn chưa thanh toán và đếm món chưa phục vụ.
+- Thêm `POST /api/staff/tables/:id/pay`: nhận phương thức thanh toán, khóa bản ghi bàn/đơn bằng transaction, từ chối nếu còn món chưa phục vụ hoặc không còn đơn chưa thanh toán, cập nhật tất cả đơn thành đã thanh toán rồi trả bàn về `available`.
+- Flutter có màn hình `CashierPage`, mở từ biểu tượng thu ngân trên app nhân viên. Mỗi thẻ hiển thị bàn, số khách, số đơn, tổng tiền; nút thanh toán bị khóa khi còn món chưa phục vụ; hộp thoại cho chọn tiền mặt, chuyển khoản hoặc thẻ.
+- Thêm test widget cho thanh toán thành công và khóa thanh toán khi còn món. Mở rộng test tích hợp Node/MySQL cho tổng tiền, phương thức, `paid_at`, chống đặt thêm và trả bàn.
+
+**Kiểm thử chặng:** TypeScript typecheck đạt; test tích hợp MySQL đạt 1/1 sau khi sửa lỗi phép `JOIN` làm nhân tổng tiền theo số dòng món; Flutter analyze đạt không có vấn đề; Flutter test đạt 15 bài; APK debug app nhân viên build thành công tại `smartresapp/build/app/outputs/flutter-apk/app-debug.apk`. Lần đầu chạy test MySQL trong sandbox gặp `EACCES 127.0.0.1:3306`, sau đó đã chạy lại với quyền kết nối MySQL cục bộ.
+
+**Cách demo:** khởi động backend, mở app nhân viên, hoàn tất phục vụ món rồi bấm `Yêu cầu thanh toán`; mở biểu tượng thu ngân, kiểm tra tổng tiền, chọn phương thức và bấm `Xác nhận`. Sau khi thành công, hóa đơn biến mất khỏi danh sách và bàn trở về Trống. Chặng này chưa kết nối cổng ngân hàng thật, chưa in hóa đơn PDF và chưa có người thu ngân đăng nhập/audit.
+
 2. **Đăng nhập và phân quyền:** nhân viên, bếp, quản lý có quyền API riêng; không chỉ ẩn/hiện nút trên giao diện.
 3. **Khách quét QR:** nhận diện bàn/lượt ăn, xem menu, đặt món vào cùng luồng MySQL và hạn chế yêu cầu không hợp lệ.
 4. **Quản lý:** sửa menu, bật/tắt món, quản lý bàn và báo cáo từ hóa đơn đã thanh toán.
 5. **Hoàn thiện vận hành:** cập nhật tức thời nếu cần, xử lý mất mạng, HTTPS, sao lưu và đóng gói bản cài.
 
 Đây là kế hoạch học và phát triển, không phải danh sách tính năng đã hoàn thành. Mỗi chặng nên có một luồng dùng được, kiểm tra lỗi và cập nhật lại tài liệu này.
+
+### Công cụ chạy nhanh trên Windows — 15/10/2026
+
+Đã tạo launcher để không phải gõ nhiều lệnh khi kiểm tra app:
+
+- [SmartResLauncher.exe](D:/DoAn4/SmartRes/tools/SmartResLauncher.exe) — file chạy chính, đã nhúng sẵn script nên có thể sao chép riêng file `.exe`.
+- `tools/SmartResLauncher.ps1` — mã nguồn để xem/sửa cấu hình.
+- `tools/SmartResLauncher.cs` — trình bao `.exe` gọi PowerShell.
+
+Launcher tự động kiểm tra thư mục dự án, Flutter, Android SDK và AVD `Medium_Phone`; khởi động backend Node.js nếu API chưa chạy; chờ emulator kết nối và Android khởi động xong; chạy `adb reverse tcp:4000 tcp:4000`; build APK debug nếu cần; cài APK; rồi mở app nhân viên. Có thể chạy lại không mất dữ liệu.
+
+**Cách dùng:** nhấp đúp `SmartResLauncher.exe`. Nếu muốn bỏ qua bước build để mở nhanh APK đã build, chạy trong PowerShell:
+
+```powershell
+D:\DoAn4\SmartRes\tools\SmartResLauncher.exe -SkipBuild
+```
+
+Nếu Android Studio đặt AVD tên khác, chạy script nguồn với tham số `-AvdName Ten_AVD`; nếu thư mục dự án khác, dùng `-ProjectRoot`. Lần kiểm tra ngày 15/10/2026 đã chạy thành công: backend health OK, thiết bị `emulator-5554` kết nối, reverse cổng 4000, APK cài được và app SmartRes nhân viên mở được. Launcher cần Android Studio SDK, Flutter tại `C:\flutter` và MySQL/backend hoạt động; nó không đóng các cửa sổ backend/emulator khi kết thúc.
+
+### Kiểm tra ổn định hệ thống — 15/10/2026
+
+- Flutter analyzer: đạt, không có lỗi.
+- Flutter test: đạt 15/15 bài.
+- Backend TypeScript typecheck: đạt.
+- Test tích hợp MySQL: đạt 1/1, gồm nhận bàn, chống trùng đơn, bếp, phục vụ, chờ thanh toán, khóa thanh toán khi còn món và chốt hóa đơn.
+- `/api/health`: `status=ok`, `storage=mysql`.
+- Kiểm tra cuối: `emulator-5554` ở trạng thái `device`, reverse `host-16 tcp:4000 tcp:4000`, tiến trình `com.example.smartresapp` đang chạy.
+
+Lúc bắt đầu lượt kiểm tra emulator đã tắt nên ADB chưa có thiết bị; launcher đã tự bật lại và hoàn tất kiểm tra. Đây là trạng thái ổn định cho môi trường phát triển hiện tại, chưa phải bản production vì còn thiếu đăng nhập/phân quyền, HTTPS, sao lưu, push nền và cổng thanh toán thật.

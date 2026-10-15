@@ -7,6 +7,7 @@ import 'kitchen_page.dart';
 import 'restaurant_theme.dart';
 import 'order_catalogue.dart';
 import 'ready_alert.dart';
+import 'cashier_page.dart';
 
 const staffGreen = brandOrange;
 String staffMoney(num value) =>
@@ -182,6 +183,17 @@ class _StaffPageState extends State<StaffPage> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Mở thu ngân',
+            onPressed: () async {
+              await Navigator.push<void>(
+                context,
+                MaterialPageRoute(builder: (_) => const CashierPage()),
+              );
+              if (mounted) await refresh();
+            },
+            icon: const Icon(Icons.point_of_sale_outlined),
+          ),
           IconButton(
             tooltip: 'Mở màn hình bếp',
             onPressed: () async {

@@ -60,6 +60,27 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     assert.equal(state.items.find((i:{id:number})=>i.id===itemId).status,'served');
     assert.equal((await post('tables/1/request-payment',{})).status,200);
     assert.equal((await post('orders',{...body,requestId:randomUUID()})).status,409);
+    const cashier=await (await fetch(`${base}/cashier`)).json();
+    const [unpaidTotals]=await db.query<RowDataPacket[]>('SELECT COALESCE(SUM(total_amount),0) AS total FROM orders WHERE table_id=1 AND payment_status=\'unpaid\'');
+    assert.equal(cashier.tables[0].totalAmount,Number(unpaidTotals[0].total));
+    assert.equal(cashier.tables[0].pendingItems,1);
+    assert.equal((await post('tables/1/pay',{paymentMethod:'cash'})).status,409);
+    const secondItemId=rows[1].id;
+    assert.equal((await post(`items/${secondItemId}/kitchen`,{status:'cooking'})).status,200);
+    assert.equal((await post(`items/${secondItemId}/kitchen`,{status:'completed'})).status,200);
+    assert.equal((await post(`items/${secondItemId}/serve`,{})).status,200);
+    const cashierReady=await (await fetch(`${base}/cashier`)).json();
+    assert.equal(cashierReady.tables[0].pendingItems,0);
+    const paid=await (await post('tables/1/pay',{paymentMethod:'bank_transfer'})).json();
+    assert.equal(paid.totalAmount,Number(unpaidTotals[0].total));
+    const afterPay=await (await fetch(`${base}/cashier`)).json();
+    assert.equal(afterPay.tables.length,0);
+    const [paidRows]=await db.query<RowDataPacket[]>('SELECT payment_status,payment_method,paid_at FROM orders');
+    assert.equal(paidRows[0].payment_status,'paid');
+    assert.equal(paidRows[0].payment_method,'bank_transfer');
+    assert.ok(paidRows[0].paid_at);
+    const afterTable=await (await fetch(`${base}/snapshot`)).json();
+    assert.equal(afterTable.tables[0].status,'available');
     await stop();server=undefined;
   }finally{
     if(server)await new Promise<void>(r=>server!.close(()=>r()));

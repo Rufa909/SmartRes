@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS orders (
  id BIGINT PRIMARY KEY AUTO_INCREMENT, order_code VARCHAR(40) NOT NULL UNIQUE,
  request_id VARCHAR(100) NOT NULL UNIQUE, request_hash CHAR(64) NOT NULL,
  table_id BIGINT NOT NULL, status ENUM('new','completed','cancelled') DEFAULT 'new',
- payment_status ENUM('unpaid','paid') DEFAULT 'unpaid', total_amount DECIMAL(12,2) NOT NULL,
+ payment_status ENUM('unpaid','paid') DEFAULT 'unpaid', payment_method ENUM('cash','bank_transfer','card') NULL,
+ paid_at TIMESTAMP NULL, total_amount DECIMAL(12,2) NOT NULL,
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
  FOREIGN KEY (table_id) REFERENCES restaurant_tables(id)
 );

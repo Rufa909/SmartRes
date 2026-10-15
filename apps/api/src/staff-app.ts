@@ -42,6 +42,36 @@ export function createStaffApp(db: Pool) {
     if (!result.affectedRows) throw new ApiError(409,'Bàn không ở trạng thái đang phục vụ.');
     res.json({ok:true});
   }));
+  app.get('/api/staff/cashier', route(async (_req,res) => {
+    const [rows] = await db.query<RowDataPacket[]>(`SELECT t.id AS tableId,t.code AS tableCode,t.guests,
+      bill.totalAmount,bill.orderCount,bill.openedAt,COALESCE(pending.pendingItems,0) AS pendingItems
+      FROM restaurant_tables t
+      JOIN (SELECT table_id,SUM(total_amount) AS totalAmount,COUNT(id) AS orderCount,MIN(created_at) AS openedAt
+        FROM orders WHERE payment_status='unpaid' AND status<>'cancelled' GROUP BY table_id) bill ON bill.table_id=t.id
+      LEFT JOIN (SELECT o.table_id,COUNT(*) AS pendingItems FROM order_items i JOIN orders o ON o.id=i.order_id
+        WHERE o.payment_status='unpaid' AND o.status<>'cancelled' AND i.status<>'served' GROUP BY o.table_id) pending ON pending.table_id=t.id
+      WHERE t.status='waiting_payment' ORDER BY t.code`);
+    res.json({tables: rows.map(r => ({...r,totalAmount:Number(r.totalAmount),orderCount:Number(r.orderCount),pendingItems:Number(r.pendingItems)}))});
+  }));
+  app.post('/api/staff/tables/:id/pay', route(async (req,res) => {
+    const tableId = id.parse(req.params.id);
+    const method = z.enum(['cash','bank_transfer','card']).parse(req.body.paymentMethod);
+    const c = await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
+      if (tables[0]?.status !== 'waiting_payment') throw new ApiError(409,'Bàn chưa được yêu cầu thanh toán.');
+      const [pending] = await c.query<RowDataPacket[]>(`SELECT i.id FROM order_items i JOIN orders o ON o.id=i.order_id
+        WHERE o.table_id=? AND o.payment_status='unpaid' AND o.status<>'cancelled' AND i.status<>'served' LIMIT 1`,[tableId]);
+      if (pending.length) throw new ApiError(409,'Chưa thể thanh toán: vẫn còn món chưa phục vụ.');
+      const [orders] = await c.query<RowDataPacket[]>('SELECT id,total_amount FROM orders WHERE table_id=? AND payment_status=\'unpaid\' AND status<>\'cancelled\' FOR UPDATE',[tableId]);
+      if (!orders.length) throw new ApiError(409,'Bàn không còn hóa đơn chưa thanh toán.');
+      await c.execute(`UPDATE orders SET payment_status='paid',payment_method=?,paid_at=CURRENT_TIMESTAMP WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled'`,[method,tableId]);
+      await c.execute(`UPDATE restaurant_tables SET status='available',guests=0 WHERE id=? AND status='waiting_payment'`,[tableId]);
+      await c.commit();
+      res.json({ok:true,tableId,paymentMethod:method,totalAmount:orders.reduce((sum,o)=>sum+Number(o.total_amount),0)});
+    } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
+  }));
   app.post('/api/staff/orders', route(async (req,res) => {
     const input=createOrder.parse(req.body);
     input.items.sort((a,b)=>a.menuItemId-b.menuItemId);

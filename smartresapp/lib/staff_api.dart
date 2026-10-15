@@ -60,6 +60,11 @@ class StaffApi {
   }
 
   Future<Map<String, dynamic>> snapshot() => request('snapshot');
+  Future<Map<String, dynamic>> cashier() => request('cashier');
+  Future<void> pay(int tableId, String paymentMethod) async {
+    await request('tables/$tableId/pay', {'paymentMethod': paymentMethod});
+  }
+
   Future<void> seat(int tableId, int guests) async {
     await request('tables/$tableId/seat', {'guests': guests});
   }

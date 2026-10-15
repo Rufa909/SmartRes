@@ -11,6 +11,8 @@ try {
   await c.changeUser({ database });
   const schema = await readFile(new URL('../../../database/staff-schema.sql', import.meta.url), 'utf8');
   for (const sql of schema.split(';').filter(s => s.trim())) await c.query(sql);
+  await c.query("ALTER TABLE orders ADD COLUMN payment_method ENUM('cash','bank_transfer','card') NULL").catch(e => { if (e.code !== 'ER_DUP_FIELDNAME') throw e; });
+  await c.query('ALTER TABLE orders ADD COLUMN paid_at TIMESTAMP NULL').catch(e => { if (e.code !== 'ER_DUP_FIELDNAME') throw e; });
   await c.beginTransaction();
   for (const [index, code] of ['A01','A02','A03','A04','A05','A06','B01','B02'].entries()) {
     await c.execute('INSERT IGNORE INTO restaurant_tables (code,name,area,seats) VALUES (?,?,?,4)', [code, `Bàn ${code}`, index < 6 ? 'Tầng 1' : 'Tầng 2']);
