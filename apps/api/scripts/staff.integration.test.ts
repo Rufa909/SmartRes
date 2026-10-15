@@ -6,6 +6,7 @@ import {readFile} from 'node:fs/promises';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {once} from 'node:events';
 import {createStaffApp} from '../src/staff-app.js';
+import {hashPassword} from '../src/auth.js';
 dotenv.config({path:new URL('../../../.env.mysql.local',import.meta.url),quiet:true});
 
 test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ liệu sau restart',async()=>{
@@ -18,13 +19,24 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
   try {
     const schema=await readFile(new URL('../../../database/staff-schema.sql',import.meta.url),'utf8');
     for(const sql of schema.split(';').filter(s=>s.trim())) await db.query(sql);
+    await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['nhanvien','Nhân viên test','staff',hashPassword('Staff@123')]);
+    await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['bep','Bếp test','kitchen',hashPassword('Bep@12345')]);
     await db.query("INSERT INTO restaurant_tables(id,code,name,area) VALUES (1,'TEST','Bàn kiểm thử','Test')");
     await db.query("INSERT INTO categories(id,name) VALUES (1,'Test')");
     await db.query("INSERT INTO menu_items(id,category_id,name,price,is_available) VALUES (1,1,'Cơm',45000,1),(2,1,'Trà',25000,1),(3,1,'Hết món',10000,0)");
     async function start(){server=createStaffApp(db).listen(0,'127.0.0.1');await once(server,'listening');return `http://127.0.0.1:${(server.address() as {port:number}).port}/api/staff`;}
     async function stop(){if(server)await new Promise<void>((resolve,reject)=>server!.close(e=>e?reject(e):resolve()));}
     let base=await start();
-    const post=(path:string,body:unknown)=>fetch(`${base}/${path}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const login=await fetch(`${base.replace('/api/staff','')}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'nhanvien',password:'Staff@123'})});
+    assert.equal(login.status,200);
+    const {token}=await login.json() as {token:string};
+    const authHeaders={'Authorization':`Bearer ${token}`};
+    const get=(path:string)=>fetch(`${base}/${path}`,{headers:authHeaders});
+    const post=(path:string,body:unknown)=>fetch(`${base}/${path}`,{method:'POST',headers:{...authHeaders,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const kitchenLogin=await fetch(`${base.replace('/api/staff','')}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'bep',password:'Bep@12345'})});
+    const kitchenToken=(await kitchenLogin.json() as {token:string}).token;
+    const kitchenPost=(path:string,body:unknown)=>fetch(`${base}/${path}`,{method:'POST',headers:{'Authorization':`Bearer ${kitchenToken}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    assert.equal((await fetch(`${base}/snapshot`)).status,401);
     assert.equal((await post('tables/1/seat',{guests:5})).status,409);
     assert.equal((await post('tables/1/seat',{guests:2})).status,200);
     assert.equal((await post('tables/1/seat',{guests:2})).status,409);
@@ -40,47 +52,48 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     const [rows]=await db.query<RowDataPacket[]>('SELECT id FROM order_items ORDER BY id');
     const itemId=rows[0].id;
     assert.equal((await post(`items/${itemId}/serve`,{})).status,409);
-    assert.equal((await post(`items/${itemId}/kitchen`,{status:'completed'})).status,409);
-    assert.equal((await post(`items/${itemId}/kitchen`,{status:'served'})).status,400);
+    assert.equal((await kitchenPost(`items/${itemId}/kitchen`,{status:'completed'})).status,409);
+    assert.equal((await kitchenPost(`items/${itemId}/kitchen`,{status:'served'})).status,400);
     const kitchenStarts=await Promise.all([
-      post(`items/${itemId}/kitchen`,{status:'cooking'}),post(`items/${itemId}/kitchen`,{status:'cooking'})]);
+      kitchenPost(`items/${itemId}/kitchen`,{status:'cooking'}),kitchenPost(`items/${itemId}/kitchen`,{status:'cooking'})]);
     assert.ok(kitchenStarts.every(r=>r.status===200));
-    assert.equal((await post(`items/${itemId}/kitchen`,{status:'completed'})).status,200);
-    assert.equal((await post(`items/${itemId}/kitchen`,{status:'completed'})).status,200);
-    assert.equal((await post(`items/${itemId}/kitchen`,{status:'cooking'})).status,409);
-    const kitchenState=await (await fetch(`${base}/snapshot`)).json();
+    assert.equal((await kitchenPost(`items/${itemId}/kitchen`,{status:'completed'})).status,200);
+    assert.equal((await kitchenPost(`items/${itemId}/kitchen`,{status:'completed'})).status,200);
+    assert.equal((await kitchenPost(`items/${itemId}/kitchen`,{status:'cooking'})).status,409);
+    const kitchenState=await (await get('snapshot')).json();
     assert.equal(kitchenState.items.find((i:{id:number})=>i.id===itemId).status,'completed');
     assert.equal((await post(`items/${itemId}/serve`,{})).status,200);
-    assert.equal((await post(`items/${itemId}/kitchen`,{status:'completed'})).status,409);
+    assert.equal((await kitchenPost(`items/${itemId}/kitchen`,{status:'completed'})).status,409);
     assert.equal((await post(`items/${itemId}/serve`,{})).status,200);
     await stop();base=await start();
-    const state=await (await fetch(`${base}/snapshot`)).json();
+    const state=await (await get('snapshot')).json();
     assert.equal(state.tables[0].guests,2);
     assert.equal(state.items.length,2);
     assert.equal(state.items.find((i:{id:number})=>i.id===itemId).status,'served');
     assert.equal((await post('tables/1/request-payment',{})).status,200);
     assert.equal((await post('orders',{...body,requestId:randomUUID()})).status,409);
-    const cashier=await (await fetch(`${base}/cashier`)).json();
+    const cashier=await (await get('cashier')).json();
     const [unpaidTotals]=await db.query<RowDataPacket[]>('SELECT COALESCE(SUM(total_amount),0) AS total FROM orders WHERE table_id=1 AND payment_status=\'unpaid\'');
     assert.equal(cashier.tables[0].totalAmount,Number(unpaidTotals[0].total));
     assert.equal(cashier.tables[0].pendingItems,1);
     assert.equal((await post('tables/1/pay',{paymentMethod:'cash'})).status,409);
     const secondItemId=rows[1].id;
-    assert.equal((await post(`items/${secondItemId}/kitchen`,{status:'cooking'})).status,200);
-    assert.equal((await post(`items/${secondItemId}/kitchen`,{status:'completed'})).status,200);
+    assert.equal((await kitchenPost(`items/${secondItemId}/kitchen`,{status:'cooking'})).status,200);
+    assert.equal((await kitchenPost(`items/${secondItemId}/kitchen`,{status:'completed'})).status,200);
     assert.equal((await post(`items/${secondItemId}/serve`,{})).status,200);
-    const cashierReady=await (await fetch(`${base}/cashier`)).json();
+    const cashierReady=await (await get('cashier')).json();
     assert.equal(cashierReady.tables[0].pendingItems,0);
     const paid=await (await post('tables/1/pay',{paymentMethod:'bank_transfer'})).json();
     assert.equal(paid.totalAmount,Number(unpaidTotals[0].total));
-    const afterPay=await (await fetch(`${base}/cashier`)).json();
+    const afterPay=await (await get('cashier')).json();
     assert.equal(afterPay.tables.length,0);
     const [paidRows]=await db.query<RowDataPacket[]>('SELECT payment_status,payment_method,paid_at FROM orders');
     assert.equal(paidRows[0].payment_status,'paid');
     assert.equal(paidRows[0].payment_method,'bank_transfer');
     assert.ok(paidRows[0].paid_at);
-    const afterTable=await (await fetch(`${base}/snapshot`)).json();
+    const afterTable=await (await get('snapshot')).json();
     assert.equal(afterTable.tables[0].status,'available');
+    assert.equal((await fetch(`${base}/tables/1/seat`,{method:'POST',headers:{'Authorization':`Bearer ${kitchenToken}`,'Content-Type':'application/json'},body:JSON.stringify({guests:2})})).status,403);
     await stop();server=undefined;
   }finally{
     if(server)await new Promise<void>(r=>server!.close(()=>r()));

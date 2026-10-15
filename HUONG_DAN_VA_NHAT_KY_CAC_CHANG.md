@@ -226,6 +226,7 @@ Các đường dẫn dưới đây tính từ `D:\DoAn4\SmartRes`:
 | `smartresapp/lib/staff_page.dart` | Giao diện bàn, gọi món, phục vụ |
 | `smartresapp/lib/kitchen_page.dart` | Hàng đợi và thao tác bếp |
 | `smartresapp/lib/cashier_page.dart` | Hóa đơn chờ thanh toán và xác nhận thu tiền |
+| `smartresapp/lib/login_page.dart` | Màn hình đăng nhập và báo lỗi phiên |
 | `smartresapp/lib/staff_api.dart` | Flutter gọi HTTP API |
 | `apps/api/src/staff-server.ts` | Khởi động backend nhân viên/bếp |
 | `apps/api/src/staff-app.ts` | Các API và kiểm tra nghiệp vụ |
@@ -252,6 +253,7 @@ Nên đọc theo thứ tự: `main_staff.dart` → `staff_page.dart` → `staff_
 | `POST /api/staff/tables/:id/request-payment` | Yêu cầu thanh toán |
 | `GET /api/staff/cashier` | Danh sách hóa đơn đang chờ thu ngân |
 | `POST /api/staff/tables/:id/pay` | Xác nhận thanh toán và trả bàn về trống |
+| `POST /api/auth/login` | Đăng nhập và nhận token phiên |
 
 ## 7. Kiểm thử và kết quả
 
@@ -407,4 +409,26 @@ Nếu Android Studio đặt AVD tên khác, chạy script nguồn với tham s�
 - `/api/health`: `status=ok`, `storage=mysql`.
 - Kiểm tra cuối: `emulator-5554` ở trạng thái `device`, reverse `host-16 tcp:4000 tcp:4000`, tiến trình `com.example.smartresapp` đang chạy.
 
-Lúc bắt đầu lượt kiểm tra emulator đã tắt nên ADB chưa có thiết bị; launcher đã tự bật lại và hoàn tất kiểm tra. Đây là trạng thái ổn định cho môi trường phát triển hiện tại, chưa phải bản production vì còn thiếu đăng nhập/phân quyền, HTTPS, sao lưu, push nền và cổng thanh toán thật.
+Lúc bắt đầu lượt kiểm tra emulator đã tắt nên ADB chưa có thiết bị; launcher đã tự bật lại và hoàn tất kiểm tra. Đây là trạng thái ổn định cho môi trường phát triển hiện tại, chưa phải bản production vì còn thiếu HTTPS, sao lưu, push nền, audit và cổng thanh toán thật.
+
+### Chặng đăng nhập và phân quyền — 15/10/2026
+
+**Workflow:** `Mở app → Đăng nhập → Backend xác thực mật khẩu → Cấp token → Kiểm tra vai trò ở từng API → Hiển thị đúng màn hình`.
+
+**Đã triển khai:**
+
+- Thêm bảng `users` với `username`, `display_name`, `password_hash`, `role`, `is_active`.
+- Mật khẩu được băm bằng `scrypt`; backend không lưu mật khẩu thô.
+- Thêm `POST /api/auth/login`, token HMAC có thời hạn 12 giờ.
+- Middleware backend bắt buộc `Authorization: Bearer <token>` cho toàn bộ API vận hành.
+- Vai trò `staff`: sơ đồ bàn, nhận bàn, gọi món, phục vụ, yêu cầu thanh toán, thu ngân.
+- Vai trò `kitchen`: xem snapshot và cập nhật trạng thái món trong bếp; không được nhận bàn, gọi món hoặc thanh toán.
+- Vai trò `manager`: có quyền của nhân viên và bếp để quản lý vận hành.
+- Flutter `StaffApi` tự gắn token vào các request sau đăng nhập. App nhân viên điều hướng tài khoản bếp vào màn hình bếp; app bếp chỉ cho tài khoản `kitchen` hoặc `manager` vào.
+- Test đã kiểm tra: không token trả 401, bếp gọi API nhận bàn trả 403, nhân viên đọc snapshot thành công. Flutter có test token được gắn vào request.
+
+**Tài khoản demo phát triển:** `nhanvien / Staff@123`, `bep / Bep@12345`, `quanly / QuanLy@123`. Đây chỉ là tài khoản local để demo; phải đổi mật khẩu và đặt `SMARTRES_AUTH_SECRET` riêng trước khi triển khai thật.
+
+**Kiểm thử chặng:** MySQL migration/setup đạt; TypeScript typecheck đạt; test tích hợp đạt 1/1; Flutter analyzer không lỗi; Flutter test đạt 16/16; APK debug build thành công và launcher đã cài/mở app trên `emulator-5554`.
+
+**Giới hạn còn lại:** token hiện lưu trong bộ nhớ app nên đóng app sẽ đăng nhập lại; chưa có refresh token, đổi mật khẩu, khóa tài khoản sau nhiều lần sai, nhật ký audit và màn hình quản lý người dùng. Các phần này thuộc chặng bảo mật/vận hành tiếp theo.

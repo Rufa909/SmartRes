@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import { readFile } from 'node:fs/promises';
+import { randomBytes, scryptSync } from 'node:crypto';
 dotenv.config({ path: new URL('../../../.env.mysql.local', import.meta.url), quiet: true });
 const database = process.env.MYSQL_DATABASE;
 if (database !== 'smartres_staff') throw new Error('Setup chỉ dành cho database smartres_staff.');
@@ -11,6 +12,17 @@ try {
   await c.changeUser({ database });
   const schema = await readFile(new URL('../../../database/staff-schema.sql', import.meta.url), 'utf8');
   for (const sql of schema.split(';').filter(s => s.trim())) await c.query(sql);
+  const passwordHash = (password) => {
+    const salt = randomBytes(16).toString('hex');
+    return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
+  };
+  for (const user of [
+    ['nhanvien', 'Nhân viên demo', 'staff', 'Staff@123'],
+    ['bep', 'Bếp demo', 'kitchen', 'Bep@12345'],
+    ['quanly', 'Quản lý demo', 'manager', 'QuanLy@123'],
+  ]) {
+    await c.execute('INSERT IGNORE INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', [user[0],user[1],user[2],passwordHash(user[3])]);
+  }
   await c.query("ALTER TABLE orders ADD COLUMN payment_method ENUM('cash','bank_transfer','card') NULL").catch(e => { if (e.code !== 'ER_DUP_FIELDNAME') throw e; });
   await c.query('ALTER TABLE orders ADD COLUMN paid_at TIMESTAMP NULL').catch(e => { if (e.code !== 'ER_DUP_FIELDNAME') throw e; });
   await c.beginTransaction();

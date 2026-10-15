@@ -17,9 +17,26 @@ String newRequestId() {
 class StaffApi {
   final http.Client client;
   final String baseUrl;
+  String? token;
   StaffApi({http.Client? client, String? baseUrl})
     : client = client ?? http.Client(),
       baseUrl = baseUrl ?? defaultBaseUrl;
+
+  Future<Map<String, dynamic>> login(String username, String password) async {
+    try {
+      final response = await client.post(Uri.parse('$baseUrl/api/auth/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'username': username, 'password': password}));
+      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StaffApiError(data['message'] as String? ?? 'Đăng nhập thất bại.');
+      }
+      token = data['token'] as String;
+      return data;
+    } on StaffApiError { rethrow; } catch (_) {
+      throw StaffApiError('Không kết nối được máy chủ. Kiểm tra backend và kết nối thiết bị.');
+    }
+  }
 
   static String get defaultBaseUrl {
     const configured = String.fromEnvironment('STAFF_API_URL');
@@ -35,12 +52,14 @@ class StaffApi {
   ]) async {
     try {
       final url = Uri.parse('$baseUrl/api/staff/$path');
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (token != null) headers['Authorization'] = 'Bearer $token';
       final response =
           await (body == null
-                  ? client.get(url)
+                  ? client.get(url, headers: headers)
                   : client.post(
                       url,
-                      headers: {'Content-Type': 'application/json'},
+                      headers: headers,
                       body: jsonEncode(body),
                     ))
               .timeout(const Duration(seconds: 10));
