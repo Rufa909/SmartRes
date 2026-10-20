@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS users (
  id BIGINT PRIMARY KEY AUTO_INCREMENT, username VARCHAR(60) NOT NULL UNIQUE,
  display_name VARCHAR(120) NOT NULL, password_hash VARCHAR(220) NOT NULL,
- role ENUM('staff','kitchen','manager') NOT NULL, is_active BOOLEAN NOT NULL DEFAULT TRUE,
+ role ENUM('staff','kitchen','cashier','manager') NOT NULL, is_active BOOLEAN NOT NULL DEFAULT TRUE,
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS restaurant_tables (

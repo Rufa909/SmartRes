@@ -12,6 +12,7 @@ try {
   await c.changeUser({ database });
   const schema = await readFile(new URL('../../../database/staff-schema.sql', import.meta.url), 'utf8');
   for (const sql of schema.split(';').filter(s => s.trim())) await c.query(sql);
+  await c.query("ALTER TABLE users MODIFY COLUMN role ENUM('staff','kitchen','cashier','manager') NOT NULL");
   const passwordHash = (password) => {
     const salt = randomBytes(16).toString('hex');
     return `${salt}:${scryptSync(password, salt, 64).toString('hex')}`;
@@ -19,6 +20,7 @@ try {
   for (const user of [
     ['nhanvien', 'Nhân viên demo', 'staff', 'Staff@123'],
     ['bep', 'Bếp demo', 'kitchen', 'Bep@12345'],
+    ['thungan', 'Thu ngân demo', 'cashier', 'ThuNgan@123'],
     ['quanly', 'Quản lý demo', 'manager', 'QuanLy@123'],
   ]) {
     await c.execute('INSERT IGNORE INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', [user[0],user[1],user[2],passwordHash(user[3])]);

@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
-export type Role = 'staff' | 'kitchen' | 'manager';
+export type Role = 'staff' | 'kitchen' | 'cashier' | 'manager';
 export type AuthUser = { id: number; username: string; displayName: string; role: Role };
 
 const secret = process.env.SMARTRES_AUTH_SECRET || 'smartres-dev-secret-change-me';
@@ -32,7 +32,7 @@ export function readToken(token: string): AuthUser | null {
     if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
     const data = JSON.parse(decode(payload)) as AuthUser & { exp?: number };
     if (!data.exp || data.exp < Math.floor(Date.now() / 1000)) return null;
-    if (!data.id || !data.username || !['staff', 'kitchen', 'manager'].includes(data.role)) return null;
+    if (!data.id || !data.username || !['staff', 'kitchen', 'cashier', 'manager'].includes(data.role)) return null;
     return data;
   } catch { return null; }
 }

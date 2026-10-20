@@ -9,6 +9,8 @@ import 'order_catalogue.dart';
 import 'ready_alert.dart';
 import 'cashier_page.dart';
 
+import 'package:flutter/services.dart';
+
 const staffGreen = brandOrange;
 String staffMoney(num value) =>
     '${value.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ';
@@ -539,38 +541,55 @@ class _StaffPageState extends State<StaffPage> {
   );
 
   Future<void> seatTable(Map<String, dynamic> t) async {
-    int guests = 1;
-    final selected = await showDialog<int>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
+    final guestController = TextEditingController(text: '1');
+    int? selected;
+    try {
+      selected = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
           title: Text('Nhận bàn ${t['code']}'),
-          content: DropdownButtonFormField<int>(
-            initialValue: guests,
-            decoration: const InputDecoration(labelText: 'Số khách'),
-            items: List.generate(
-              t['seats'] as int,
-              (i) =>
-                  DropdownMenuItem(value: i + 1, child: Text('${i + 1} khách')),
+          content: TextField(
+            controller: guestController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(
+              labelText: 'Số lượng khách',
+              hintText: 'Số lượng từ 1 trở lên',
+              prefixIcon: Icon(Icons.people_outline),
             ),
-            onChanged: (v) => setLocal(() => guests = v!),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
+              onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Hủy'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(ctx, guests),
+              onPressed: () {
+                final value = int.tryParse(guestController.text.trim());
+                if (value == null || value < 1 || value > 99) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(content: Text('Số khách phải từ 1 đến 99.')),
+                  );
+                  return;
+                }
+                Navigator.of(dialogContext).pop(value);
+              },
               child: const Text('Xác nhận'),
             ),
           ],
         ),
-      ),
-    );
+      );
+    } finally {
+      // Dialog còn đang hoàn tất animation tháo TextField; dispose ngay sẽ
+      // kích hoạt Flutter assertion _dependents.isEmpty khi bấm Hủy/Xác nhận.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        guestController.dispose();
+      });
+    }
     if (selected != null && mounted) {
+      final guests = selected;
       await mutate(
-        () => api.seat(t['id'] as int, selected),
+        () => api.seat(t['id'] as int, guests),
         'Đã nhận bàn ${t['code']}.',
       );
     }

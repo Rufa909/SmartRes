@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'staff_page.dart';
 import 'kitchen_page.dart';
+import 'cashier_page.dart';
 import 'login_page.dart';
 import 'staff_api.dart';
 import 'restaurant_theme.dart';
@@ -33,6 +34,8 @@ class _StaffAuthGateState extends State<StaffAuthGate> {
   @override
   Widget build(BuildContext context) {
     if (user == null) return LoginPage(api: api, onLoggedIn: (value) async => setState(() => user = value));
-    return user!['role'] == 'kitchen' ? KitchenPage(api: api) : StaffPage(api: api);
+    if (user!['role'] == 'kitchen') return KitchenPage(api: api);
+    if (user!['role'] == 'cashier') return CashierPage(api: api);
+    return StaffPage(api: api);
   }
 }

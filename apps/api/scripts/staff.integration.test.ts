@@ -21,6 +21,7 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     for(const sql of schema.split(';').filter(s=>s.trim())) await db.query(sql);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['nhanvien','Nhân viên test','staff',hashPassword('Staff@123')]);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['bep','Bếp test','kitchen',hashPassword('Bep@12345')]);
+    await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['thungan','Thu ngân test','cashier',hashPassword('ThuNgan@123')]);
     await db.query("INSERT INTO restaurant_tables(id,code,name,area) VALUES (1,'TEST','Bàn kiểm thử','Test')");
     await db.query("INSERT INTO categories(id,name) VALUES (1,'Test')");
     await db.query("INSERT INTO menu_items(id,category_id,name,price,is_available) VALUES (1,1,'Cơm',45000,1),(2,1,'Trà',25000,1),(3,1,'Hết món',10000,0)");
@@ -36,9 +37,16 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     const kitchenLogin=await fetch(`${base.replace('/api/staff','')}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'bep',password:'Bep@12345'})});
     const kitchenToken=(await kitchenLogin.json() as {token:string}).token;
     const kitchenPost=(path:string,body:unknown)=>fetch(`${base}/${path}`,{method:'POST',headers:{'Authorization':`Bearer ${kitchenToken}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const cashierLogin=await fetch(`${base.replace('/api/staff','')}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'thungan',password:'ThuNgan@123'})});
+    assert.equal(cashierLogin.status,200);
+    const cashierToken=(await cashierLogin.json() as {token:string}).token;
+    const cashierGet=(path:string)=>fetch(`${base}/${path}`,{headers:{'Authorization':`Bearer ${cashierToken}`}});
+    const cashierPost=(path:string,body:unknown)=>fetch(`${base}/${path}`,{method:'POST',headers:{'Authorization':`Bearer ${cashierToken}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    assert.equal((await cashierGet('cashier')).status,200);
+    assert.equal((await cashierPost('tables/1/seat',{guests:2})).status,403);
     assert.equal((await fetch(`${base}/snapshot`)).status,401);
-    assert.equal((await post('tables/1/seat',{guests:5})).status,409);
-    assert.equal((await post('tables/1/seat',{guests:2})).status,200);
+    assert.equal((await post('tables/1/seat',{guests:5})).status,200);
+    assert.equal((await post('tables/1/request-payment',{})).status,409);
     assert.equal((await post('tables/1/seat',{guests:2})).status,409);
     const requestId=randomUUID();
     const body={tableId:1,requestId,items:[{menuItemId:1,quantity:2,unitPrice:1},{menuItemId:2,quantity:1}]};
@@ -67,7 +75,7 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     assert.equal((await post(`items/${itemId}/serve`,{})).status,200);
     await stop();base=await start();
     const state=await (await get('snapshot')).json();
-    assert.equal(state.tables[0].guests,2);
+    assert.equal(state.tables[0].guests,5);
     assert.equal(state.items.length,2);
     assert.equal(state.items.find((i:{id:number})=>i.id===itemId).status,'served');
     assert.equal((await post('tables/1/request-payment',{})).status,200);

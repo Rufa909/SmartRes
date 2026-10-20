@@ -47,18 +47,28 @@ export function createStaffApp(db: Pool) {
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }));
   app.post('/api/staff/tables/:id/seat', requireRole('staff','manager'), route(async (req,res) => {
-    const tableId=id.parse(req.params.id), guests=z.number().int().min(1).max(20).parse(req.body.guests);
+    const tableId=id.parse(req.params.id), guests=z.number().int().min(1).max(99).parse(req.body.guests);
     const [result]=await db.execute<ResultSetHeader>(`UPDATE restaurant_tables SET status='dining',guests=?
-      WHERE id=? AND status='available' AND seats>=?`, [guests,tableId,guests]);
-    if (!result.affectedRows) throw new ApiError(409,'Bàn không còn trống hoặc số khách vượt số chỗ.');
+      WHERE id=? AND status='available'`, [guests,tableId]);
+    if (!result.affectedRows) throw new ApiError(409,'Bàn không còn trống hoặc không tồn tại.');
     res.json({ok:true});
   }));
   app.post('/api/staff/tables/:id/request-payment', requireRole('staff','manager'), route(async (req,res) => {
-    const [result]=await db.execute<ResultSetHeader>(`UPDATE restaurant_tables SET status='waiting_payment' WHERE id=? AND status='dining'`, [id.parse(req.params.id)]);
-    if (!result.affectedRows) throw new ApiError(409,'Bàn không ở trạng thái đang phục vụ.');
-    res.json({ok:true});
+    const tableId = id.parse(req.params.id);
+    const c = await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
+      if (tables[0]?.status !== 'dining') throw new ApiError(409,'Bàn không ở trạng thái đang phục vụ.');
+      const [orders] = await c.query<RowDataPacket[]>(`SELECT id FROM orders
+        WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled' LIMIT 1`,[tableId]);
+      if (!orders.length) throw new ApiError(409,'Bàn chưa có đơn hàng chưa thanh toán.');
+      await c.execute(`UPDATE restaurant_tables SET status='waiting_payment' WHERE id=? AND status='dining'`,[tableId]);
+      await c.commit();
+      res.json({ok:true});
+    } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }));
-  app.get('/api/staff/cashier', requireRole('staff','manager'), route(async (_req,res) => {
+  app.get('/api/staff/cashier', requireRole('staff','cashier','manager'), route(async (_req,res) => {
     const [rows] = await db.query<RowDataPacket[]>(`SELECT t.id AS tableId,t.code AS tableCode,t.guests,
       bill.totalAmount,bill.orderCount,bill.openedAt,COALESCE(pending.pendingItems,0) AS pendingItems
       FROM restaurant_tables t
@@ -69,7 +79,7 @@ export function createStaffApp(db: Pool) {
       WHERE t.status='waiting_payment' ORDER BY t.code`);
     res.json({tables: rows.map(r => ({...r,totalAmount:Number(r.totalAmount),orderCount:Number(r.orderCount),pendingItems:Number(r.pendingItems)}))});
   }));
-  app.post('/api/staff/tables/:id/pay', requireRole('staff','manager'), route(async (req,res) => {
+  app.post('/api/staff/tables/:id/pay', requireRole('staff','cashier','manager'), route(async (req,res) => {
     const tableId = id.parse(req.params.id);
     const method = z.enum(['cash','bank_transfer','card']).parse(req.body.paymentMethod);
     const c = await db.getConnection();

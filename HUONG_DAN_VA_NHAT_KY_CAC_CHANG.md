@@ -415,6 +415,22 @@ Lúc bắt đầu lượt kiểm tra emulator đã tắt nên ADB chưa có thi�
 
 Launcher bị dừng ở bước kiểm tra backend vì vòng lặp PowerShell dùng `break` trong `ForEach-Object`, làm thoát cả script khi API vừa sẵn sàng. Đã đổi sang vòng lặp `for` có điều kiện, build lại `tools/SmartResLauncher.exe` và chạy kiểm tra thành công đủ 5 bước: backend, emulator, reverse cổng 4000, cài APK và mở app. Kiểm tra cuối xác nhận `emulator-5554` ở trạng thái `device`, reverse `host-15 tcp:4000 tcp:4000` và tiến trình app đang chạy.
 
+### Sửa nhập số lượng khách — 20/10/2026
+
+Màn hình nhận bàn trong `smartresapp/lib/staff_page.dart` đã đổi từ danh sách chọn sang ô nhập số. Ô này chỉ nhận chữ số, kiểm tra giá trị từ 1 đến 99, rồi gửi số khách vào API. Backend cũng bỏ điều kiện số khách phải nhỏ hơn số chỗ của bàn; giới hạn an toàn hiện là 99 người. Đã sửa vị trí nút Hủy/Xác nhận, giải phóng controller sau hộp thoại và chạy lại Flutter analyzer cùng 16/16 bài test; test MySQL cũng xác nhận bàn 4 chỗ vẫn nhận được 5 khách theo yêu cầu.
+
+### Sửa lỗi Flutter assertion hộp thoại nhận khách — 20/10/2026
+
+Ảnh lỗi `_dependents.isEmpty` xuất hiện vì controller của ô nhập bị `dispose()` ngay khi dialog còn đang đóng. Đã chuyển dispose sang frame kế tiếp, giữ nút Hủy chỉ đóng dialog và build/cài lại APK. Flutter analyzer đạt, 16/16 test đạt, launcher cài APK mới và mở app trên emulator thành công.
+
+### Role thu ngân riêng — 20/10/2026
+
+Màn hình thu ngân và API thu tiền đã có từ chặng trước, nhưng trước đây dùng chung role `staff`. Đã thêm role backend `cashier`, migration enum không mất dữ liệu cũ, tài khoản `thungan / ThuNgan@123`, và điều hướng tài khoản này vào thẳng `CashierPage`. Thu ngân chỉ được `GET /api/staff/cashier` và `POST /api/staff/tables/:id/pay`; gọi API nhận bàn, gọi món hoặc bếp sẽ bị backend trả 403. Đã kiểm tra đăng nhập thật, integration test đạt, Flutter analyzer/test đạt và APK app nhân viên build lại thành công.
+
+### Sửa dữ liệu bàn chờ thanh toán không có đơn — 20/10/2026
+
+Đối chiếu API cho thấy A04 và A05 ở trạng thái `waiting_payment` nhưng không có dòng `orders`, nên thu ngân không thể tạo hóa đơn từ hai bàn đó. Đã sửa API `request-payment` để chỉ cho chuyển bàn sang chờ thanh toán khi có đơn chưa thanh toán; hai bàn mồ côi hiện được trả về `available` và reset số khách về 0. Kiểm tra lại: `waiting=0`, danh sách hóa đơn thu ngân phản ánh đúng dữ liệu đơn thật.
+
 ### Chặng đăng nhập và phân quyền — 15/10/2026
 
 **Workflow:** `Mở app → Đăng nhập → Backend xác thực mật khẩu → Cấp token → Kiểm tra vai trò ở từng API → Hiển thị đúng màn hình`.
