@@ -33,9 +33,9 @@ Write-Host '[1/5] Kiem tra va khoi dong backend...' -ForegroundColor Cyan
 if (-not (Test-ApiReady)) {
   Start-Process powershell.exe -ArgumentList '-NoExit','-NoProfile','-Command',("Set-Location -LiteralPath '{0}'; npm --workspace apps/api run dev:staff" -f $ProjectRoot)
   $ready = $false
-  1..60 | ForEach-Object {
+  for ($i = 0; $i -lt 60 -and -not $ready; $i++) {
     Start-Sleep -Seconds 1
-    if (Test-ApiReady) { $ready = $true; break }
+    if (Test-ApiReady) { $ready = $true }
   }
   if (-not $ready) { Fail 'Backend chua san sang sau 60 giay. Kiem tra cua so backend va MySQL.' }
 }

@@ -411,6 +411,10 @@ Nếu Android Studio đặt AVD tên khác, chạy script nguồn với tham s�
 
 Lúc bắt đầu lượt kiểm tra emulator đã tắt nên ADB chưa có thiết bị; launcher đã tự bật lại và hoàn tất kiểm tra. Đây là trạng thái ổn định cho môi trường phát triển hiện tại, chưa phải bản production vì còn thiếu HTTPS, sao lưu, push nền, audit và cổng thanh toán thật.
 
+### Sửa launcher Windows — 20/10/2026
+
+Launcher bị dừng ở bước kiểm tra backend vì vòng lặp PowerShell dùng `break` trong `ForEach-Object`, làm thoát cả script khi API vừa sẵn sàng. Đã đổi sang vòng lặp `for` có điều kiện, build lại `tools/SmartResLauncher.exe` và chạy kiểm tra thành công đủ 5 bước: backend, emulator, reverse cổng 4000, cài APK và mở app. Kiểm tra cuối xác nhận `emulator-5554` ở trạng thái `device`, reverse `host-15 tcp:4000 tcp:4000` và tiến trình app đang chạy.
+
 ### Chặng đăng nhập và phân quyền — 15/10/2026
 
 **Workflow:** `Mở app → Đăng nhập → Backend xác thực mật khẩu → Cấp token → Kiểm tra vai trò ở từng API → Hiển thị đúng màn hình`.
