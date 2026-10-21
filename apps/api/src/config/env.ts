@@ -9,6 +9,7 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.string().default("development"),
   API_PORT: z.coerce.number().default(4000),
+  CUSTOMER_API_PORT: z.coerce.number().default(4010),
   MYSQL_HOST: z.string().default("localhost"),
   MYSQL_PORT: z.coerce.number().default(3306),
   MYSQL_DATABASE: z.string().default("smartres"),

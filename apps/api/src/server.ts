@@ -8,7 +8,7 @@ const server = http.createServer(app);
 
 registerSockets(server);
 
-server.listen(env.API_PORT, () => {
-  console.log(`SmartRes API listening on port ${env.API_PORT}`);
+server.listen(env.CUSTOMER_API_PORT, "0.0.0.0", () => {
+  console.log(`SmartRes Customer API listening on port ${env.CUSTOMER_API_PORT}`);
 });
 

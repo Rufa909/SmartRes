@@ -16,14 +16,14 @@ import {
   UtensilsCrossed,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type MenuItem = {
-  id: string;
+  id: number;
   name: string;
   description: string;
   price: number;
-  category: "Món nổi bật" | "Khai vị" | "Món chính" | "Đồ uống";
+  category: string;
   badge?: string;
   color: string;
   symbol: string;
@@ -40,19 +40,22 @@ type CartItem = {
 };
 
 const menuItems: MenuItem[] = [
-  { id: "pho-bo", name: "Phở bún mì canh", description: "Nước dùng hầm đậm vị, dùng kèm rau thơm và hành phi.", price: 59000, category: "Món nổi bật", badge: "Bán chạy", color: "#fff0eb", symbol: "🍜" },
-  { id: "ga-nuong", name: "Gà nướng muối ớt", description: "Gà nướng da giòn, vị cay nhẹ, ăn cùng rau củ.", price: 69000, category: "Món chính", badge: "Bán chạy", color: "#fff3e4", symbol: "🍗" },
-  { id: "com-rang", name: "Cơm rang cháy hành", description: "Cơm rang trứng, hành phi giòn và sốt nhà làm.", price: 55000, category: "Món chính", color: "#fff7da", symbol: "🍚" },
-  { id: "lau-alibaba", name: "Lẩu Alibaba", description: "Nước lẩu chua cay, hải sản và rau tươi cho 2 người.", price: 159000, category: "Món nổi bật", badge: "Món mới", color: "#ffece8", symbol: "🍲" },
-  { id: "cha-gio", name: "Chả giò hải sản", description: "Vỏ giòn, nhân hải sản, dùng kèm sốt chua ngọt.", price: 45000, category: "Khai vị", color: "#fff2dc", symbol: "🥟" },
-  { id: "salad", name: "Salad rau mùa", description: "Rau xanh, cà chua bi và sốt mè rang thanh nhẹ.", price: 39000, category: "Khai vị", color: "#edf8e8", symbol: "🥗" },
-  { id: "tra-dao", name: "Trà đào cam sả", description: "Trà đào mát lạnh, cam vàng và sả thơm.", price: 39000, category: "Đồ uống", badge: "Yêu thích", color: "#fff0da", symbol: "🍹" },
-  { id: "ca-phe", name: "Cà phê sữa đá", description: "Cà phê rang đậm, sữa đặc và đá viên.", price: 32000, category: "Đồ uống", color: "#f3ebe6", symbol: "☕" }
+  { id: 101, name: "Phở bún mì canh", description: "Nước dùng hầm đậm vị, dùng kèm rau thơm và hành phi.", price: 59000, category: "Món nổi bật", badge: "Bán chạy", color: "#fff0eb", symbol: "🍜" },
+  { id: 102, name: "Gà nướng muối ớt", description: "Gà nướng da giòn, vị cay nhẹ, ăn cùng rau củ.", price: 69000, category: "Món chính", badge: "Bán chạy", color: "#fff3e4", symbol: "🍗" },
+  { id: 103, name: "Cơm rang cháy hành", description: "Cơm rang trứng, hành phi giòn và sốt nhà làm.", price: 55000, category: "Món chính", color: "#fff7da", symbol: "🍚" },
+  { id: 104, name: "Lẩu Alibaba", description: "Nước lẩu chua cay, hải sản và rau tươi cho 2 người.", price: 159000, category: "Món nổi bật", badge: "Món mới", color: "#ffece8", symbol: "🍲" },
+  { id: 105, name: "Chả giò hải sản", description: "Vỏ giòn, nhân hải sản, dùng kèm sốt chua ngọt.", price: 45000, category: "Khai vị", color: "#fff2dc", symbol: "🥟" },
+  { id: 106, name: "Salad rau mùa", description: "Rau xanh, cà chua bi và sốt mè rang thanh nhẹ.", price: 39000, category: "Khai vị", color: "#edf8e8", symbol: "🥗" },
+  { id: 107, name: "Trà đào cam sả", description: "Trà đào mát lạnh, cam vàng và sả thơm.", price: 39000, category: "Đồ uống", badge: "Yêu thích", color: "#fff0da", symbol: "🍹" },
+  { id: 108, name: "Cà phê sữa đá", description: "Cà phê rang đậm, sữa đặc và đá viên.", price: 32000, category: "Đồ uống", color: "#f3ebe6", symbol: "☕" }
 ];
 
 const categories = ["Tất cả", "Khai vị", "Món chính", "Đồ uống"] as const;
-const sizePrices = { Nhỏ: -10000, Vừa: 0, Lớn: 15000 } as const;
-const extraPrices: Record<string, number> = { "Thêm thịt": 15000, "Thêm trứng": 10000 };
+// Các món hiện chưa cấu hình phụ thu theo size/topping trong database.
+const sizePrices = { Nhỏ: 0, Vừa: 0, Lớn: 0 } as const;
+const extraPrices: Record<string, number> = {};
+// Gọi cùng tên miền với trang web; Next.js sẽ proxy tới Customer API ở máy chủ.
+const apiBaseUrl = "/api/customer";
 
 function formatPrice(value: number) {
   return `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
@@ -102,15 +105,44 @@ export function OrderExperience({ tableId }: { tableId: string }) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
+  const [liveMenuItems, setLiveMenuItems] = useState<MenuItem[]>(menuItems);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  const [isOrdering, setIsOrdering] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [orderCode, setOrderCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiBaseUrl}/menu`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Không tải được thực đơn.");
+        const data = await response.json() as { items: Array<{ id: number; name: string; description: string | null; price: number | string; category: string; emoji?: string | null }> };
+        if (!cancelled) {
+          const colors = ["#fff0eb", "#fff7da", "#edf8e8", "#fff0da", "#f3ebe6", "#f0edff"];
+          setLiveMenuItems(data.items.map((item, index) => ({
+            id: item.id,
+            name: item.name,
+            description: item.description || "Món ăn được chuẩn bị tươi ngon tại nhà hàng.",
+            price: Number(item.price),
+            category: item.category,
+            color: colors[index % colors.length],
+            symbol: item.emoji || "🍽️"
+          })));
+          setMenuError(null);
+        }
+      })
+      .catch(() => { if (!cancelled) setMenuError("Chưa kết nối được máy chủ. Vui lòng thử lại sau."); });
+    return () => { cancelled = true; };
+  }, []);
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("vi");
-    return menuItems.filter((item) => {
+    return liveMenuItems.filter((item) => {
       const categoryMatches = category === "Tất cả" || item.category === category;
       const queryMatches = !normalizedQuery || `${item.name} ${item.description}`.toLocaleLowerCase("vi").includes(normalizedQuery);
       return categoryMatches && queryMatches;
     });
-  }, [category, query]);
+  }, [category, liveMenuItems, query]);
 
   const cartCount = cart.reduce((sum, cartItem) => sum + cartItem.quantity, 0);
   const subtotal = cart.reduce((sum, cartItem) => sum + cartItem.unitPrice * cartItem.quantity, 0);
@@ -143,10 +175,34 @@ export function OrderExperience({ tableId }: { tableId: string }) {
     setCart((current) => quantity === 0 ? current.filter((cartItem) => cartItem.key !== key) : current.map((cartItem) => cartItem.key === key ? { ...cartItem, quantity } : cartItem));
   }
 
-  function placeOrder() {
-    if (!cart.length) return;
-    setOrderPlaced(true);
-    setCartOpen(false);
+  async function placeOrder() {
+    if (!cart.length || isOrdering) return;
+    setIsOrdering(true);
+    setOrderError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tableCode: tableId.toUpperCase(),
+          items: cart.map((item) => ({
+            menuItemId: item.item.id,
+            quantity: item.quantity,
+            options: [{ size: item.size, extras: item.extras }],
+            note: item.note || undefined
+          }))
+        })
+      });
+      const data = await response.json() as { order?: { orderCode?: string }; message?: string };
+      if (!response.ok) throw new Error(data.message || "Không thể gửi đơn. Vui lòng thử lại.");
+      setOrderCode(data.order?.orderCode ?? null);
+      setOrderPlaced(true);
+      setCartOpen(false);
+    } catch (error) {
+      setOrderError(error instanceof Error ? error.message : "Không thể gửi đơn. Vui lòng thử lại.");
+    } finally {
+      setIsOrdering(false);
+    }
   }
 
   const selectedPrice = selectedItem ? selectedItem.price + sizePrices[selectedSize] + extras.reduce((sum, extra) => sum + extraPrices[extra], 0) : 0;
@@ -208,6 +264,8 @@ export function OrderExperience({ tableId }: { tableId: string }) {
               <div className="absolute right-8 top-8 hidden text-8xl sm:block">🍲</div>
             </section>
 
+            {menuError && <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">{menuError}</p>}
+
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative min-w-0 flex-1">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
@@ -253,7 +311,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
         </section>
 
         <aside className="hidden border-l border-slate-200 bg-white xl:block">
-          <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} />
+          <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} isOrdering={isOrdering} orderError={orderError} />
         </aside>
       </div>
 
@@ -315,7 +373,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
         <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-sm xl:hidden" role="dialog" aria-modal="true" aria-label="Giỏ hàng">
           <div className="ml-auto h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl">
             <button onClick={() => setCartOpen(false)} className="absolute right-4 top-4 z-10 grid h-10 w-10 place-items-center rounded-full bg-slate-100" aria-label="Đóng giỏ hàng"><X size={18} /></button>
-            <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} />
+            <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} isOrdering={isOrdering} orderError={orderError} />
           </div>
         </div>
       )}
@@ -325,7 +383,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
           <div className="w-full max-w-sm rounded-[32px] bg-white p-7 text-center shadow-2xl">
             <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-emerald-100 text-emerald-600"><CheckCircle2 size={40} /></div>
             <h2 className="mt-5 text-2xl font-black">Đã gửi món đến bếp!</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-500">Đơn của {tableName} đã được ghi nhận. Bếp sẽ bắt đầu chuẩn bị trong ít phút.</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Đơn {orderCode ? `#${orderCode}` : ""} của {tableName} đã được ghi nhận. Bếp sẽ bắt đầu chuẩn bị trong ít phút.</p>
             <div className="mt-5 flex items-center justify-center gap-2 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700"><ChefHat size={18} /> Trạng thái: Đơn mới</div>
             <button onClick={() => { setOrderPlaced(false); setCart([]); }} className="mt-5 h-12 w-full rounded-2xl bg-coral font-black text-white">Tiếp tục xem thực đơn</button>
           </div>
@@ -335,7 +393,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
   );
 }
 
-function CartPanel({ tableName, cart, subtotal, onQuantityChange, onOrder }: { tableName: string; cart: CartItem[]; subtotal: number; onQuantityChange: (key: string, quantity: number) => void; onOrder: () => void }) {
+function CartPanel({ tableName, cart, subtotal, onQuantityChange, onOrder, isOrdering, orderError }: { tableName: string; cart: CartItem[]; subtotal: number; onQuantityChange: (key: string, quantity: number) => void; onOrder: () => void; isOrdering: boolean; orderError: string | null }) {
   return (
     <div className="sticky top-0 flex min-h-screen flex-col px-5 py-6">
       <div className="pr-12 xl:pr-0">
@@ -366,7 +424,8 @@ function CartPanel({ tableName, cart, subtotal, onQuantityChange, onOrder }: { t
             <div className="mt-2 flex justify-between text-sm text-slate-500"><span>Phí phục vụ</span><span className="text-emerald-600">0đ</span></div>
             <div className="mt-4 flex justify-between border-t border-slate-200 pt-4"><span className="font-black">Tổng cộng</span><span className="text-xl font-black text-coral">{formatPrice(subtotal)}</span></div>
           </div>
-          <button onClick={onOrder} className="mt-5 w-full rounded-2xl bg-coral px-4 py-3.5 font-black text-white shadow-lg shadow-coral/20">Xác nhận gọi món</button>
+          {orderError && <p className="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{orderError}</p>}
+          <button disabled={isOrdering} onClick={onOrder} className="mt-5 w-full rounded-2xl bg-coral px-4 py-3.5 font-black text-white shadow-lg shadow-coral/20 disabled:cursor-not-allowed disabled:opacity-60">{isOrdering ? "Đang gửi đơn..." : "Xác nhận gọi món"}</button>
           <p className="mt-3 text-center text-xs leading-5 text-slate-400">Bạn có thể gọi thêm món trong cùng phiên bàn sau khi xác nhận.</p>
         </>
       ) : (

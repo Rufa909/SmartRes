@@ -1,0 +1,17 @@
+npm notice run @smartres/web@0.1.0 dev
+npm notice run next dev -H 0.0.0.0 -p 3000
+   ▲ Next.js 15.5.28
+   - Local:        http://localhost:3000
+   - Network:      http://0.0.0.0:3000
+
+ ✓ Starting...
+ ✓ Ready in 2.3s
+ ○ Compiling /order/[tableId] ...
+ ✓ Compiled /order/[tableId] in 3.9s (594 modules)
+ ✓ Compiled in 142ms (250 modules)
+ GET /order/A01 200 in 4930ms
+ GET /order/A01 200 in 129ms
+ ⚠ Cross origin request detected from 192.168.2.46 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ ✓ Compiled in 379ms (594 modules)
+ GET /order/A01 200 in 261ms

@@ -1,0 +1,3 @@
+npm notice run @smartres/api@0.1.0 dev:customer
+npm notice run tsx watch src/server.ts
+SmartRes Customer API listening on port 4010

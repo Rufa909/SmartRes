@@ -1,37 +1,75 @@
 import { db } from "../infrastructure/database.js";
-import type { ResultSetHeader } from "mysql2";
+import type { ResultSetHeader, RowDataPacket } from "mysql2";
+import { createHash, randomUUID } from "node:crypto";
 
 export interface CreateOrderItemInput {
-  menuItemId: string;
-  name: string;
+  menuItemId: number;
   quantity: number;
-  unitPrice: number;
   options?: unknown[];
   note?: string;
 }
 
 export interface CreateOrderInput {
-  tableId: string;
+  tableCode: string;
   customerNote?: string;
   items: CreateOrderItemInput[];
+}
+
+interface TableRow extends RowDataPacket {
+  id: number;
+  status: string;
+}
+
+interface MenuItemRow extends RowDataPacket {
+  id: number;
+  name: string;
+  price: number;
+  is_available: number;
 }
 
 export class OrderRepository {
   async create(input: CreateOrderInput) {
     const connection = await db.getConnection();
-    const totalAmount = input.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const orderCode = `SR${Date.now()}`;
 
     try {
       await connection.beginTransaction();
 
+      const [tables] = await connection.query<TableRow[]>(
+        "SELECT id, status FROM restaurant_tables WHERE code = ? FOR UPDATE",
+        [input.tableCode]
+      );
+      const table = tables[0];
+      if (!table || table.status === "disabled") {
+        throw new Error("Bàn không hợp lệ hoặc đang tạm ngưng phục vụ.");
+      }
+
+      const lines: Array<CreateOrderItemInput & { name: string; unitPrice: number }> = [];
+      let totalAmount = 0;
+      for (const item of input.items) {
+        const [menuItems] = await connection.query<MenuItemRow[]>(
+          "SELECT id, name, price, is_available FROM menu_items WHERE id = ? FOR SHARE",
+          [item.menuItemId]
+        );
+        const menuItem = menuItems[0];
+        if (!menuItem || !menuItem.is_available) {
+          throw new Error("Một món đã hết hoặc không còn phục vụ. Vui lòng tải lại thực đơn.");
+        }
+        const unitPrice = Number(menuItem.price);
+        totalAmount += unitPrice * item.quantity;
+        lines.push({ ...item, name: menuItem.name, unitPrice });
+      }
+
+      const requestId = randomUUID();
+      const requestHash = createHash("sha256").update(JSON.stringify({ tableCode: input.tableCode, items: input.items })).digest("hex");
+      const orderCode = `SR-${randomUUID()}`;
+
       const [orderResult] = await connection.execute<ResultSetHeader>(
-        `INSERT INTO orders (order_code, table_id, total_amount, customer_note)
-         VALUES (?, ?, ?, ?)`,
-        [orderCode, input.tableId, totalAmount, input.customerNote ?? null]
+        `INSERT INTO orders (order_code, request_id, request_hash, table_id, total_amount, customer_note)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [orderCode, requestId, requestHash, table.id, totalAmount, input.customerNote ?? null]
       );
 
-      for (const item of input.items) {
+      for (const item of lines) {
         await connection.execute(
           `INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price, options_json, note)
            VALUES (?, ?, ?, ?, ?, CAST(? AS JSON), ?)`,
@@ -47,17 +85,14 @@ export class OrderRepository {
         );
       }
 
-      await connection.execute(
-        "UPDATE restaurant_tables SET status = 'dining' WHERE id = ?",
-        [input.tableId]
-      );
+      await connection.execute("UPDATE restaurant_tables SET status = 'dining' WHERE id = ?", [table.id]);
 
       await connection.commit();
 
       return {
         id: String(orderResult.insertId),
         orderCode,
-        tableId: input.tableId,
+        tableCode: input.tableCode,
         status: "new",
         paymentStatus: "unpaid",
         totalAmount,

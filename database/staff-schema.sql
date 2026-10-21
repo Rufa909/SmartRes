@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS orders (
  table_id BIGINT NOT NULL, status ENUM('new','completed','cancelled') DEFAULT 'new',
  payment_status ENUM('unpaid','paid') DEFAULT 'unpaid', payment_method ENUM('cash','bank_transfer','card') NULL,
  paid_at TIMESTAMP NULL, total_amount DECIMAL(12,2) NOT NULL,
+ customer_note TEXT NULL,
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
  FOREIGN KEY (table_id) REFERENCES restaurant_tables(id)
 );
@@ -35,5 +36,7 @@ CREATE TABLE IF NOT EXISTS order_items (
  item_name VARCHAR(160) NOT NULL, quantity INT NOT NULL, unit_price DECIMAL(12,2) NOT NULL,
  status ENUM('preparing','cooking','completed','served') NOT NULL DEFAULT 'preparing',
  served_at TIMESTAMP NULL,
+ options_json JSON NULL,
+ note TEXT NULL,
  FOREIGN KEY (order_id) REFERENCES orders(id), FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
 );

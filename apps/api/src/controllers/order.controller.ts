@@ -3,18 +3,16 @@ import { z } from "zod";
 import type { OrderService } from "../services/order.service.js";
 
 const createOrderSchema = z.object({
-  tableId: z.string().min(1),
-  customerNote: z.string().optional(),
+  tableCode: z.string().trim().min(1).max(32),
+  customerNote: z.string().trim().max(1000).optional(),
   items: z.array(
     z.object({
-      menuItemId: z.string().min(1),
-      name: z.string().min(1),
+      menuItemId: z.coerce.number().int().positive(),
       quantity: z.number().int().positive(),
-      unitPrice: z.number().nonnegative(),
       options: z.array(z.unknown()).optional(),
-      note: z.string().optional()
+      note: z.string().trim().max(500).optional()
     })
-  )
+  ).min(1).max(30)
 });
 
 const updateStatusSchema = z.object({
