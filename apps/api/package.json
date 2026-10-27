@@ -6,6 +6,7 @@
   "scripts": {
     "db:staff": "node scripts/setup-staff-db.mjs",
     "db:customer": "node scripts/setup-customer-db.mjs",
+    "db:invoices": "tsx scripts/setup-invoices.ts",
     "qr:tables": "node scripts/generate-table-qrs.mjs",
     "dev:staff": "tsx watch src/staff-server.ts",
     "dev:customer": "tsx watch src/server.ts",

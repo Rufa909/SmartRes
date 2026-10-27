@@ -4,12 +4,19 @@ import helmet from 'helmet';
 import { createHash, randomUUID } from 'node:crypto';
 import { z, ZodError } from 'zod';
 import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
-import { createToken, readToken, verifyPassword, type Role } from './auth.js';
+import { createToken, readToken, verifyPassword, type Role, type AuthUser } from './auth.js';
+import { readInvoice } from './invoice.js';
+import { parseInvoiceSnapshot } from './invoice-storage.js';
 
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 const id = z.coerce.number().int().positive();
 const createOrder = z.object({ tableId: id, requestId: z.string().uuid(),
   items: z.array(z.object({ menuItemId: id, quantity: z.number().int().min(1).max(99) })).min(1).max(50) });
+const adjustmentLine = z.union([
+  z.object({itemId:id,quantity:z.number().int().min(1).max(99)}).strict(),
+  z.object({menuItemId:id,quantity:z.number().int().min(1).max(99),served:z.boolean().default(false),note:z.string().trim().max(500).default('')}).strict(),
+]);
+const currentUser = (req: express.Request) => (req as express.Request & {user:AuthUser}).user;
 
 export function createStaffApp(db: Pool) {
   const app = express();
@@ -39,7 +46,7 @@ export function createStaffApp(db: Pool) {
       const [menu] = await c.query<RowDataPacket[]>(`SELECT m.id,m.name,m.emoji,m.price,m.is_available AS available,c.name AS category
         FROM menu_items m JOIN categories c ON c.id=m.category_id ORDER BY c.sort_order,m.id`);
       const [items] = await c.query<RowDataPacket[]>(`SELECT i.id,t.code AS tableCode,i.item_name AS name,i.quantity,i.status,
-        i.unit_price AS unitPrice,o.order_code AS orderCode,o.created_at AS createdAt
+        i.unit_price AS unitPrice,i.note,o.order_code AS orderCode,o.created_at AS createdAt
         FROM order_items i JOIN orders o ON o.id=i.order_id JOIN restaurant_tables t ON t.id=o.table_id
         WHERE o.status <> 'cancelled' AND o.payment_status='unpaid' ORDER BY i.id DESC`);
       await c.commit();
@@ -69,15 +76,125 @@ export function createStaffApp(db: Pool) {
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }));
   app.get('/api/staff/cashier', requireRole('staff','cashier','manager'), route(async (_req,res) => {
-    const [rows] = await db.query<RowDataPacket[]>(`SELECT t.id AS tableId,t.code AS tableCode,t.guests,
-      bill.totalAmount,bill.orderCount,bill.openedAt,COALESCE(pending.pendingItems,0) AS pendingItems
-      FROM restaurant_tables t
-      JOIN (SELECT table_id,SUM(total_amount) AS totalAmount,COUNT(id) AS orderCount,MIN(created_at) AS openedAt
-        FROM orders WHERE payment_status='unpaid' AND status<>'cancelled' GROUP BY table_id) bill ON bill.table_id=t.id
-      LEFT JOIN (SELECT o.table_id,COUNT(*) AS pendingItems FROM order_items i JOIN orders o ON o.id=i.order_id
-        WHERE o.payment_status='unpaid' AND o.status<>'cancelled' AND i.status<>'served' GROUP BY o.table_id) pending ON pending.table_id=t.id
-      WHERE t.status='waiting_payment' ORDER BY t.code`);
-    res.json({tables: rows.map(r => ({...r,totalAmount:Number(r.totalAmount),orderCount:Number(r.orderCount),pendingItems:Number(r.pendingItems)}))});
+    const c=await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables]=await c.query<RowDataPacket[]>("SELECT id FROM restaurant_tables WHERE status='waiting_payment' ORDER BY code");
+      const rows=[];
+      for (const table of tables) {
+        const bill=await readInvoice(c,Number(table.id));
+        if (bill) rows.push({tableId:bill.tableId,tableCode:bill.tableCode,guests:bill.guests,openedAt:bill.openedAt,
+          orderCount:bill.orderCodes.length,pendingItems:bill.pendingItems,totalAmount:bill.totalAmount,
+          subtotalAmount:bill.subtotalAmount,discountAmount:bill.discountAmount});
+      }
+      await c.commit();
+      res.json({tables:rows});
+    } catch(e) {await c.rollback();throw e;} finally {c.release();}
+  }));
+  app.get('/api/staff/tables/:id/invoice', requireRole('staff','cashier','manager'), route(async (req,res) => {
+    const tableId = id.parse(req.params.id);
+    const c = await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
+      if (tables[0]?.status !== 'waiting_payment') throw new ApiError(409,'Bàn chưa được yêu cầu thanh toán.');
+      const invoice = await readInvoice(c,tableId);
+      if (!invoice) throw new ApiError(409,'Bàn không còn hóa đơn chưa thanh toán.');
+      await c.commit();
+      res.json({invoice});
+    } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
+  }));
+  app.get('/api/staff/cashier/menu', requireRole('cashier','manager'), route(async (_req,res) => {
+    const [rows] = await db.query<RowDataPacket[]>(`SELECT id,name,price FROM menu_items WHERE is_available=1 ORDER BY name`);
+    res.json({items:rows.map(i=>({...i,price:Number(i.price)}))});
+  }));
+  app.post('/api/staff/tables/:id/invoice', requireRole('cashier','manager'), route(async (req,res) => {
+    const tableId = id.parse(req.params.id);
+    const input = z.object({version:z.string().length(64),items:z.array(adjustmentLine).min(1).max(200),reason:z.string().trim().max(500).default('Điều chỉnh hóa đơn')}).parse(req.body);
+    const c = await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
+      if (tables[0]?.status !== 'waiting_payment') throw new ApiError(409,'Chỉ được sửa hóa đơn chưa thanh toán.');
+      const [orders] = await c.query<RowDataPacket[]>(`SELECT id FROM orders WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled' ORDER BY id FOR UPDATE`,[tableId]);
+      await c.query(`SELECT i.id FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.table_id=? AND o.payment_status='unpaid' AND o.status<>'cancelled' FOR UPDATE`,[tableId]);
+      const before = await readInvoice(c,tableId);
+      if (!before || !orders.length) throw new ApiError(409,'Không còn hóa đơn để chỉnh sửa.');
+      if (before.version !== input.version) throw new ApiError(409,'Hóa đơn đã thay đổi trên thiết bị khác. Đóng và mở lại chi tiết để tải bản mới.');
+      const previous = new Map(before.items.map(i=>[Number(i.id),i]));
+      const retained = new Set<number>();
+      for (const line of input.items) {
+        if ('itemId' in line) {
+          if (!previous.has(line.itemId) || retained.has(line.itemId)) throw new ApiError(400,'Món không thuộc hóa đơn hoặc bị trùng.');
+          retained.add(line.itemId);
+          // Existing line prices and preparation status remain at their recorded values.
+          await c.execute('UPDATE order_items SET quantity=? WHERE id=?',[line.quantity,line.itemId]);
+        } else {
+          const [menu] = await c.query<RowDataPacket[]>('SELECT name,price,is_available FROM menu_items WHERE id=? FOR SHARE',[line.menuItemId]);
+          if (!menu[0]?.is_available) throw new ApiError(409,'Món thêm đã hết hoặc không còn trong thực đơn.');
+          await c.execute(`INSERT INTO order_items(order_id,menu_item_id,item_name,quantity,unit_price,status,served_at,note)
+            VALUES(?,?,?,?,?,?,IF(?=1,CURRENT_TIMESTAMP,NULL),?)`,[orders[0].id,line.menuItemId,menu[0].name,line.quantity,menu[0].price,line.served?'served':'preparing',line.served?1:0,line.note||null]);
+        }
+      }
+      for (const item of before.items) {
+        if (!retained.has(Number(item.id))) await c.execute('DELETE FROM order_items WHERE id=?',[item.id]);
+      }
+      for (const order of orders) {
+        await c.execute('UPDATE orders SET total_amount=(SELECT COALESCE(SUM(quantity*unit_price),0) FROM order_items WHERE order_id=?) WHERE id=?',[order.id,order.id]);
+      }
+      const invoice = (await readInvoice(c,tableId))!;
+      if (invoice.version !== before.version) {
+        await c.execute(`INSERT INTO invoice_adjustments(invoice_code,table_id,actor_name,reason,before_snapshot,after_snapshot) VALUES(?,?,?,?,?,?)`,
+          [invoice.invoiceCode,tableId,currentUser(req).displayName,input.reason || 'Điều chỉnh hóa đơn',JSON.stringify(before),JSON.stringify(invoice)]);
+      }
+      await c.commit();
+      res.json({invoice});
+    } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
+  }));
+  app.get('/api/staff/cashier/history', requireRole('staff','cashier','manager'), route(async (req,res) => {
+    const input=z.object({q:z.string().trim().max(100).default(''),offset:z.coerce.number().int().min(0).default(0),limit:z.coerce.number().int().min(1).max(50).default(30)}).parse(req.query);
+    const filter='%'+input.q.replace(/[\\%_]/g,'\\$&')+'%';
+    const where='WHERE invoice_code LIKE ? OR table_code LIKE ?';
+    const [rows]=await db.query<RowDataPacket[]>(`SELECT id AS historyId,invoice_code AS invoiceCode,table_code AS tableCode,total_amount AS totalAmount,
+      payment_method AS paymentMethod,paid_at AS paidAt,cashier_name AS cashierName FROM cashier_invoices ${where} ORDER BY paid_at DESC,id DESC LIMIT ? OFFSET ?`,[filter,filter,input.limit,input.offset]);
+    const [counts]=await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM cashier_invoices ${where}`,[filter,filter]);
+    res.json({invoices:rows.map(r=>({...r,totalAmount:Number(r.totalAmount)})),total:Number(counts[0].total),offset:input.offset,limit:input.limit});
+  }));
+  app.post('/api/staff/tables/:id/discount', requireRole('cashier','manager'), route(async (req,res) => {
+    const tableId=id.parse(req.params.id);
+    const input=z.discriminatedUnion('mode',[
+      z.object({mode:z.literal('none'),version:z.string().length(64)}).strict(),
+      z.object({mode:z.literal('manual'),version:z.string().length(64),percentage:z.number().min(0).max(100).multipleOf(0.01)}).strict(),
+      z.object({mode:z.literal('voucher'),version:z.string().length(64),code:z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{1,40}$/)}).strict(),
+    ]).parse(req.body);
+    const c=await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables]=await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
+      if (tables[0]?.status!=='waiting_payment') throw new ApiError(409,'Chỉ áp dụng giảm giá cho hóa đơn chưa thanh toán.');
+      const [orders]=await c.query<RowDataPacket[]>(`SELECT id FROM orders WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled' ORDER BY id FOR UPDATE`,[tableId]);
+      const before=await readInvoice(c,tableId);
+      if (!before || !orders.length) throw new ApiError(409,'Không còn hóa đơn chờ thanh toán.');
+      if (before.version!==input.version) throw new ApiError(409,'Hóa đơn đã thay đổi. Vui lòng tải lại trước khi áp dụng giảm giá.');
+      if (input.mode==='none' || (input.mode==='manual' && input.percentage===0)) {
+        await c.execute('DELETE FROM invoice_discounts WHERE first_order_id=?',[orders[0].id]);
+      } else {
+        await c.execute(`INSERT INTO invoice_discounts(first_order_id,mode,percentage,voucher_code) VALUES(?,?,?,?)
+          ON DUPLICATE KEY UPDATE mode=VALUES(mode),percentage=VALUES(percentage),voucher_code=VALUES(voucher_code)`,
+          [orders[0].id,input.mode,input.mode==='manual'?input.percentage:0,input.mode==='voucher'?input.code:null]);
+      }
+      const invoice=(await readInvoice(c,tableId))!;
+      if (invoice.discountError) throw new ApiError(409,invoice.discountError);
+      if (invoice.version!==before.version) await c.execute(`INSERT INTO invoice_adjustments(invoice_code,table_id,actor_name,reason,before_snapshot,after_snapshot) VALUES(?,?,?,?,?,?)`,
+        [invoice.invoiceCode,tableId,currentUser(req).displayName,'Cập nhật giảm giá',JSON.stringify(before),JSON.stringify(invoice)]);
+      await c.commit();
+      res.json({invoice});
+    } catch(e) {await c.rollback();throw e;} finally {c.release();}
+  }));
+  app.get('/api/staff/cashier/history/:id', requireRole('staff','cashier','manager'), route(async (req,res) => {
+    const [rows]=await db.query<RowDataPacket[]>('SELECT id,snapshot FROM cashier_invoices WHERE id=?',[id.parse(req.params.id)]);
+    if (!rows.length) throw new ApiError(404,'Không tìm thấy hóa đơn đã lưu.');
+    res.json({invoice:{...parseInvoiceSnapshot(rows[0].snapshot),historyId:Number(rows[0].id)}});
   }));
   app.post('/api/staff/tables/:id/pay', requireRole('staff','cashier','manager'), route(async (req,res) => {
     const tableId = id.parse(req.params.id);
@@ -92,10 +209,25 @@ export function createStaffApp(db: Pool) {
       if (pending.length) throw new ApiError(409,'Chưa thể thanh toán: vẫn còn món chưa phục vụ.');
       const [orders] = await c.query<RowDataPacket[]>('SELECT id,total_amount FROM orders WHERE table_id=? AND payment_status=\'unpaid\' AND status<>\'cancelled\' FOR UPDATE',[tableId]);
       if (!orders.length) throw new ApiError(409,'Bàn không còn hóa đơn chưa thanh toán.');
+      const invoice = (await readInvoice(c,tableId))!;
+      const version = z.string().length(64).optional().parse(req.body.version);
+      if (version && version !== invoice.version) throw new ApiError(409,'Hóa đơn đã thay đổi. Vui lòng mở lại chi tiết trước khi thanh toán.');
+      if (!invoice.items.length) throw new ApiError(409,'Hóa đơn chưa có món ăn.');
+      if (invoice.discountError) throw new ApiError(409,invoice.discountError);
+      const expected = z.array(z.string()).optional().parse(req.body.orderCodes);
+      if (expected && JSON.stringify(expected) !== JSON.stringify(invoice.orderCodes)) throw new ApiError(409,'Hóa đơn đã thay đổi. Vui lòng mở lại chi tiết.');
       await c.execute(`UPDATE orders SET payment_status='paid',payment_method=?,paid_at=CURRENT_TIMESTAMP WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled'`,[method,tableId]);
+      const [paidRows] = await c.query<RowDataPacket[]>('SELECT paid_at FROM orders WHERE id=?',[orders[0].id]);
+      invoice.paidAt = new Date(paidRows[0].paid_at).toISOString();
+      invoice.issuedAt = invoice.paidAt;
+      invoice.paymentStatus = 'paid';
+      invoice.paymentMethod = method;
+      const receipt = {...invoice,cashierName:currentUser(req).displayName};
+      const [saved] = await c.execute<ResultSetHeader>(`INSERT INTO cashier_invoices(invoice_code,table_id,table_code,total_amount,payment_method,paid_at,cashier_name,snapshot)
+        VALUES(?,?,?,?,?,?,?,?)`,[invoice.invoiceCode,tableId,invoice.tableCode,invoice.totalAmount,method,paidRows[0].paid_at,receipt.cashierName,JSON.stringify(receipt)]);
       await c.execute(`UPDATE restaurant_tables SET status='available',guests=0 WHERE id=? AND status='waiting_payment'`,[tableId]);
       await c.commit();
-      res.json({ok:true,tableId,paymentMethod:method,totalAmount:orders.reduce((sum,o)=>sum+Number(o.total_amount),0)});
+      res.json({ok:true,tableId,paymentMethod:method,totalAmount:invoice.totalAmount,invoice:{...receipt,historyId:saved.insertId}});
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }));
   app.post('/api/staff/orders', requireRole('staff','manager'), route(async (req,res) => {

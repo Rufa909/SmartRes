@@ -361,6 +361,14 @@ class _KitchenPageState extends State<KitchenPage> {
                                           ),
                                         ),
                                         const SizedBox(height: 8),
+                                        if ((item['note'] as String? ?? '')
+                                            .isNotEmpty)
+                                          Text(
+                                            'Ghi chú: ${item['note']}',
+                                            style: const TextStyle(
+                                              color: Color(0xFFB45309),
+                                            ),
+                                          ),
                                         Text(
                                           'Đơn ${item['orderCode']}',
                                           style: const TextStyle(

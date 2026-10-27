@@ -1,4 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import 'invoice_dialog.dart';
+import 'cashier_history_page.dart';
 
 import 'staff_api.dart';
 import 'restaurant_theme.dart';
@@ -14,7 +19,9 @@ class CashierPage extends StatefulWidget {
 class _CashierPageState extends State<CashierPage> {
   late final StaffApi api;
   List<Map<String, dynamic>> bills = [];
-  bool loading = true, saving = false;
+  final List<Map<String, dynamic>> receipts = [];
+  Timer? timer;
+  bool loading = true, fetching = false;
   String? error;
 
   @override
@@ -22,15 +29,21 @@ class _CashierPageState extends State<CashierPage> {
     super.initState();
     api = widget.api ?? StaffApi();
     load();
+    if (widget.autoRefresh) {
+      timer = Timer.periodic(const Duration(seconds: 5), (_) => load());
+    }
   }
 
   @override
   void dispose() {
+    timer?.cancel();
     if (widget.api == null) api.client.close();
     super.dispose();
   }
 
   Future<void> load() async {
+    if (fetching) return;
+    fetching = true;
     try {
       final data = await api.cashier();
       if (!mounted) return;
@@ -46,62 +59,32 @@ class _CashierPageState extends State<CashierPage> {
           loading = false;
         });
       }
+    } finally {
+      fetching = false;
     }
   }
 
   String money(num v) =>
       '${v.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ';
-  Future<void> pay(Map<String, dynamic> bill) async {
-    String method = 'cash';
-    final selected = await showDialog<String>(
+  Future<void> pay(
+    Map<String, dynamic> bill, {
+    Map<String, dynamic>? invoice,
+  }) async {
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text('Thanh toán bàn ${bill['tableCode']}'),
-          content: DropdownButtonFormField<String>(
-            initialValue: method,
-            decoration: const InputDecoration(labelText: 'Phương thức'),
-            items: const [
-              DropdownMenuItem(value: 'cash', child: Text('Tiền mặt')),
-              DropdownMenuItem(
-                value: 'bank_transfer',
-                child: Text('Chuyển khoản'),
-              ),
-              DropdownMenuItem(value: 'card', child: Text('Thẻ')),
-            ],
-            onChanged: (v) => setLocal(() => method = v!),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Hủy'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, method),
-              child: const Text('Xác nhận'),
-            ),
-          ],
-        ),
+      barrierDismissible: false,
+      builder: (_) => InvoiceDialog(
+        api: api,
+        tableId: bill['tableId'] as int,
+        receipt: bill['paymentStatus'] == 'paid' ? bill : invoice,
+        onUpdated: load,
+        onPaid: (receipt) {
+          if (!mounted) return;
+          setState(() => receipts.insert(0, receipt));
+          load();
+        },
       ),
     );
-    if (selected == null || !mounted) return;
-    setState(() => saving = true);
-    try {
-      await api.pay(bill['tableId'] as int, selected);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã thanh toán và trả bàn về trống.')),
-        );
-      }
-      await load();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    } finally {
-      if (mounted) setState(() => saving = false);
-    }
   }
 
   @override
@@ -118,11 +101,23 @@ class _CashierPageState extends State<CashierPage> {
             ),
             Text(
               'Hóa đơn chờ thanh toán',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
           ],
         ),
         actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => CashierHistoryPage(api: api),
+              ),
+            ),
+            icon: const Icon(Icons.history),
+            label: const Text('Lịch sử'),
+          ),
           IconButton(
             tooltip: 'Tải lại hóa đơn',
             onPressed: load,
@@ -167,7 +162,7 @@ class _CashierPageState extends State<CashierPage> {
                           ),
                           SizedBox(height: 8),
                           Text(
-                            'Khi nhân viên yêu cầu thanh toán, hóa đơn sẽ xuất hiện ở đây.',
+                            'Khi khách hàng hoặc nhân viên yêu cầu thanh toán, hóa đơn sẽ xuất hiện ở đây.',
                             textAlign: TextAlign.center,
                           ),
                         ],
@@ -213,10 +208,14 @@ class _CashierPageState extends State<CashierPage> {
                               ),
                             ),
                             const SizedBox(height: 14),
+                            OutlinedButton.icon(
+                              onPressed: () => pay(bill),
+                              icon: const Icon(Icons.receipt_long_outlined),
+                              label: const Text('Xem chi tiết hóa đơn'),
+                            ),
+                            const SizedBox(height: 8),
                             FilledButton.icon(
-                              onPressed: saving || pending > 0
-                                  ? null
-                                  : () => pay(bill),
+                              onPressed: pending > 0 ? null : () => pay(bill),
                               icon: const Icon(Icons.payments_outlined),
                               label: Text(
                                 pending > 0 ? 'Chờ phục vụ món' : 'Thanh toán',
@@ -227,6 +226,31 @@ class _CashierPageState extends State<CashierPage> {
                       ),
                     );
                   }),
+                  if (receipts.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text(
+                        'Hóa đơn vừa thanh toán',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    ...receipts.map(
+                      (receipt) => Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.receipt_long),
+                          title: Text(
+                            '${receipt['invoiceCode']} • Bàn ${receipt['tableCode']}',
+                          ),
+                          subtitle: Text(money(receipt['totalAmount'] as num)),
+                          trailing: const Icon(Icons.print_outlined),
+                          onTap: () => pay(receipt),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

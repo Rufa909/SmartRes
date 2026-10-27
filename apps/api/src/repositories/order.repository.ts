@@ -1,5 +1,6 @@
 import { db } from "../infrastructure/database.js";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
+import type { Pool } from 'mysql2/promise';
 import { createHash, randomUUID } from "node:crypto";
 
 export interface CreateOrderItemInput {
@@ -28,8 +29,26 @@ interface MenuItemRow extends RowDataPacket {
 }
 
 export class OrderRepository {
+  constructor(private readonly database: Pool = db) {}
+
+  async requestPayment(orderCode: string) {
+    const c = await this.database.getConnection();
+    try {
+      await c.beginTransaction();
+      const [order] = await c.query<RowDataPacket[]>('SELECT table_id FROM orders WHERE order_code=?',[orderCode]);
+      if (!order.length) throw new Error('Không tìm thấy đơn hàng.');
+      const tableId = order[0].table_id;
+      const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
+      const [unpaid] = await c.query<RowDataPacket[]>(`SELECT id FROM orders WHERE order_code=? AND payment_status='unpaid' AND status<>'cancelled'`,[orderCode]);
+      if (!unpaid.length || !['dining','waiting_payment'].includes(tables[0]?.status)) throw new Error('Đơn hàng không còn chờ thanh toán.');
+      await c.execute("UPDATE restaurant_tables SET status='waiting_payment' WHERE id=?",[tableId]);
+      await c.commit();
+      return {ok:true};
+    } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
+  }
+
   async create(input: CreateOrderInput) {
-    const connection = await db.getConnection();
+    const connection = await this.database.getConnection();
 
     try {
       await connection.beginTransaction();
@@ -39,7 +58,7 @@ export class OrderRepository {
         [input.tableCode]
       );
       const table = tables[0];
-      if (!table || table.status === "disabled") {
+      if (!table || table.status === "disabled" || table.status === "waiting_payment") {
         throw new Error("Bàn không hợp lệ hoặc đang tạm ngưng phục vụ.");
       }
 
@@ -108,16 +127,16 @@ export class OrderRepository {
   }
 
   async updateStatus(orderId: string, status: string) {
-    await db.execute("UPDATE orders SET status = ? WHERE id = ?", [status, orderId]);
+    await this.database.execute("UPDATE orders SET status = ? WHERE id = ?", [status, orderId]);
     return { id: orderId, status };
   }
 
   async markPaidByCode(orderCode: string, providerTransactionId: string, rawPayload: unknown) {
-    await db.execute(
+    await this.database.execute(
       `UPDATE orders SET payment_status = 'paid' WHERE order_code = ?`,
       [orderCode]
     );
-    await db.execute(
+    await this.database.execute(
       `INSERT INTO payments (order_id, method, status, amount, provider_transaction_id, raw_payload, confirmed_at)
        SELECT id, 'sepay_vietqr', 'confirmed', total_amount, ?, CAST(? AS JSON), NOW()
        FROM orders WHERE order_code = ?`,

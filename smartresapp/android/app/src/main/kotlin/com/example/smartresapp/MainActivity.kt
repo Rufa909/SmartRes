@@ -13,6 +13,7 @@ class MainActivity : FlutterActivity() {
     private val handler = Handler(Looper.getMainLooper())
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        ThermalReceiptPrinter.register(this, flutterEngine.dartExecutor.binaryMessenger)
         val prefs = getSharedPreferences("staff_alerts", MODE_PRIVATE)
         volumeControlStream = AudioManager.STREAM_NOTIFICATION
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "smartres/ready_alert").setMethodCallHandler { call, result ->
