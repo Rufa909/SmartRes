@@ -249,6 +249,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('manual-discount')), findsNothing);
+      await tester.ensureVisible(find.byKey(const Key('toggle-discount')));
+      await tester.tap(find.byKey(const Key('toggle-discount')));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('manual-discount')));
       await tester.enterText(find.byKey(const Key('manual-discount')), '101');
       await tester.ensureVisible(find.text('Áp dụng'));

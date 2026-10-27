@@ -32,6 +32,7 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
   final voucher = TextEditingController();
   String discountMode = 'manual';
   bool discountDirty = false;
+  bool discountExpanded = false;
   String? discountInputError;
 
   @override
@@ -218,103 +219,125 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 16),
-        const Text('Giảm giá', style: TextStyle(fontWeight: FontWeight.bold)),
-        if (!paid) ...[
-          const SizedBox(height: 8),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'manual', label: Text('Nhập %')),
-              ButtonSegment(value: 'voucher', label: Text('Mã voucher')),
-            ],
-            selected: {discountMode},
-            onSelectionChanged: busy
+        if (!paid)
+          OutlinedButton.icon(
+            key: const Key('toggle-discount'),
+            onPressed: busy
                 ? null
-                : (value) => setState(() {
-                    discountMode = value.first;
-                    discountDirty = true;
-                    discountInputError = null;
-                  }),
-          ),
-          const SizedBox(height: 12),
-          if (discountMode == 'manual')
-            TextField(
-              key: const Key('manual-discount'),
-              controller: percentage,
-              enabled: !busy,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: 'Phần trăm giảm giá',
-                hintText: 'Ví dụ: 10',
-                suffixText: '%',
-              ),
-              onChanged: (_) => setState(() => discountDirty = true),
-            )
-          else
-            TextField(
-              key: const Key('voucher-code'),
-              controller: voucher,
-              enabled: !busy,
-              maxLength: 40,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(labelText: 'Nhập mã voucher'),
-              onChanged: (_) => setState(() => discountDirty = true),
+                : () => setState(() => discountExpanded = !discountExpanded),
+            icon: Icon(
+              discountExpanded
+                  ? Icons.keyboard_arrow_up_outlined
+                  : Icons.local_offer_outlined,
             ),
-          if (discountInputError != null)
+            label: Text(
+              discountExpanded
+                  ? 'Thu gọn giảm giá'
+                  : savedMode == 'none'
+                  ? 'Giảm giá'
+                  : 'Giảm giá đã áp dụng',
+            ),
+          ),
+        if (paid || discountExpanded) ...[
+          if (!paid) const SizedBox(height: 8),
+          const Text('Giảm giá', style: TextStyle(fontWeight: FontWeight.bold)),
+          if (!paid) ...[
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'manual', label: Text('Nhập %')),
+                ButtonSegment(value: 'voucher', label: Text('Mã voucher')),
+              ],
+              selected: {discountMode},
+              onSelectionChanged: busy
+                  ? null
+                  : (value) => setState(() {
+                      discountMode = value.first;
+                      discountDirty = true;
+                      discountInputError = null;
+                    }),
+            ),
+            const SizedBox(height: 12),
+            if (discountMode == 'manual')
+              TextField(
+                key: const Key('manual-discount'),
+                controller: percentage,
+                enabled: !busy,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Phần trăm giảm giá',
+                  hintText: 'Ví dụ: 10',
+                  suffixText: '%',
+                ),
+                onChanged: (_) => setState(() => discountDirty = true),
+              )
+            else
+              TextField(
+                key: const Key('voucher-code'),
+                controller: voucher,
+                enabled: !busy,
+                maxLength: 40,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(labelText: 'Nhập mã voucher'),
+                onChanged: (_) => setState(() => discountDirty = true),
+              ),
+            if (discountInputError != null)
+              Text(
+                discountInputError!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: busy ? null : () => applyDiscount(),
+                    child: const Text('Áp dụng'),
+                  ),
+                ),
+                if (savedMode != 'none' || discountDirty)
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () {
+                            if (savedMode != 'none') {
+                              applyDiscount(clear: true);
+                            } else {
+                              setState(() => syncDiscount(bill));
+                            }
+                          },
+                    child: const Text('Bỏ giảm giá'),
+                  ),
+              ],
+            ),
+            if (discountDirty)
+              const Text(
+                'Bấm Áp dụng để lưu mức giảm.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+          ],
+          if (bill['discountError'] != null)
             Text(
-              discountInputError!,
+              bill['discountError'] as String,
               style: const TextStyle(color: Colors.red),
             ),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: busy ? null : () => applyDiscount(),
-                  child: const Text('Áp dụng'),
-                ),
-              ),
-              if (savedMode != 'none' || discountDirty)
-                TextButton(
-                  onPressed: busy
-                      ? null
-                      : () {
-                          if (savedMode != 'none') {
-                            applyDiscount(clear: true);
-                          } else {
-                            setState(() => syncDiscount(bill));
-                          }
-                        },
-                  child: const Text('Bỏ giảm giá'),
-                ),
-            ],
-          ),
-          if (discountDirty)
-            const Text(
-              'Bấm Áp dụng để lưu mức giảm.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-        ],
-        if (bill['discountError'] != null)
+          const SizedBox(height: 8),
           Text(
-            bill['discountError'] as String,
-            style: const TextStyle(color: Colors.red),
+            'Tiền món: ${invoiceMoney((bill['subtotalAmount'] as num?) ?? bill['totalAmount'] as num)}',
           ),
-        const SizedBox(height: 8),
-        Text(
-          'Tiền món: ${invoiceMoney((bill['subtotalAmount'] as num?) ?? bill['totalAmount'] as num)}',
-        ),
-        Text(
-          'Giảm giá${savedMode == 'voucher'
-              ? ' (${bill['voucherCode']})'
-              : percent > 0
-              ? ' ($percent%)'
-              : ''}: −${invoiceMoney(amount)}',
-        ),
-        Text(
-          'Cần thanh toán: ${invoiceMoney(bill['totalAmount'] as num)}',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+          Text(
+            'Giảm giá${savedMode == 'voucher'
+                ? ' (${bill['voucherCode']})'
+                : percent > 0
+                ? ' ($percent%)'
+                : ''}: −${invoiceMoney(amount)}',
+          ),
+          Text(
+            'Cần thanh toán: ${invoiceMoney(bill['totalAmount'] as num)}',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ],
       ],
     );
   }
