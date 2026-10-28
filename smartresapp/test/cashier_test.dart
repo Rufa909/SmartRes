@@ -17,6 +17,10 @@ Map<String, dynamic> invoice({int pending = 0}) => {
   'invoiceCode': 'HD-12',
   'tableId': 2,
   'tableCode': 'A02',
+  'area': 'Tầng 1',
+  'seats': 4,
+  'status': 'waiting_payment',
+  'hasInvoice': true,
   'guests': 3,
   'totalAmount': 115000,
   'orderCount': 2,
@@ -34,6 +38,7 @@ Map<String, dynamic> invoice({int pending = 0}) => {
       'quantity': 2,
       'unitPrice': 45000,
       'lineTotal': 90000,
+      'status': pending > 0 ? 'preparing' : 'served',
     },
     {
       'id': 2,
@@ -41,6 +46,7 @@ Map<String, dynamic> invoice({int pending = 0}) => {
       'quantity': 1,
       'unitPrice': 25000,
       'lineTotal': 25000,
+      'status': pending > 1 ? 'completed' : 'served',
     },
   ],
 };
@@ -52,6 +58,71 @@ http.Response jsonResponse(Object body, [int status = 200]) => http.Response(
 );
 
 void main() {
+  testWidgets('Xác nhận lấy món mới nhất và bỏ món đã phục vụ khỏi danh sách', (
+    tester,
+  ) async {
+    final original = invoice(pending: 2);
+    final fresh = {
+      ...original,
+      'pendingItems': 1,
+      'items': [
+        {
+          ...(original['items'] as List)[0] as Map<String, dynamic>,
+          'status': 'served',
+        },
+        (original['items'] as List)[1],
+      ],
+    };
+    var reads = 0;
+    var payments = 0;
+    final client = MockClient((req) async {
+      if (req.method == 'POST') payments++;
+      reads++;
+      return jsonResponse({'invoice': fresh});
+    });
+    addTearDown(client.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: InvoiceDialog(
+          api: StaffApi(client: client),
+          tableId: 2,
+          receipt: original,
+          onPaid: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Xác nhận thanh toán'));
+    await tester.pumpAndSettle();
+    final confirmation = find.byWidgetPredicate(
+      (widget) =>
+          widget is AlertDialog && widget.content is SingleChildScrollView,
+    );
+    expect(reads, 1);
+    expect(payments, 0);
+    expect(
+      find.descendant(of: confirmation, matching: find.text('Trà đào')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: confirmation, matching: find.text('× 1')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: confirmation, matching: find.text('Cơm gà')),
+      findsNothing,
+    );
+    expect(
+      find.text(
+        'Đơn hàng còn 1 món chưa phục vụ. Bạn có chắc chắn muốn thanh toán ngay không?',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Hủy'));
+    await tester.pumpAndSettle();
+    expect(payments, 0);
+  });
+
   test('Ngày giờ hóa đơn dùng giờ Việt Nam và không có năm', () {
     expect(invoiceDate('2026-12-31T17:05:09Z'), '01/01 00:05:09');
     expect(invoiceDate(null), '—');
@@ -376,7 +447,7 @@ void main() {
     expect(args['width'], closeTo(double.parse(media[1]!), 0.01));
     expect(args['height'], closeTo(double.parse(media[2]!), 0.01));
   });
-  testWidgets('Xem chi tiết, chọn chuyển khoản, thanh toán rồi mở lại để in', (
+  testWidgets('Chọn bàn mở hóa đơn, thanh toán rồi sơ đồ chuyển bàn về trống', (
     tester,
   ) async {
     var paid = false;
@@ -400,7 +471,17 @@ void main() {
         return jsonResponse({'invoice': invoice()});
       }
       return jsonResponse({
-        'tables': paid ? [] : [invoice()],
+        'tables': [
+          if (paid)
+            {
+              ...invoice(),
+              'status': 'available',
+              'hasInvoice': false,
+              'guests': 0,
+            }
+          else
+            invoice(),
+        ],
       });
     });
     addTearDown(client.close);
@@ -410,7 +491,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Xem chi tiết hóa đơn'));
+    expect(find.text('Cơm gà'), findsNothing);
+    expect(find.textContaining('Mã hóa đơn:'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('cashier-table-2')));
     await tester.pumpAndSettle();
     expect(paid, isFalse);
     expect(find.text('Cơm gà'), findsOneWidget);
@@ -432,10 +515,14 @@ void main() {
     expect(find.text('In hóa đơn'), findsOneWidget);
     await tester.tap(find.text('Đóng'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('HD-12 • Bàn A02'));
+    expect(find.text('Trống'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('cashier-table-2')));
     await tester.pumpAndSettle();
-    expect(find.text('In hóa đơn'), findsOneWidget);
-    expect(find.text('Cơm gà'), findsOneWidget);
+    expect(
+      find.text('Bàn đang trống, chưa có hóa đơn thanh toán.'),
+      findsOneWidget,
+    );
+    expect(find.text('Cơm gà'), findsNothing);
   });
 
   testWidgets(
@@ -469,15 +556,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.widgetWithText(FilledButton, 'Thanh toán'),
-            )
-            .onPressed,
-        isNotNull,
-      );
-      await tester.tap(find.text('Xem chi tiết hóa đơn'));
+      await tester.tap(find.byKey(const ValueKey('cashier-table-2')));
       await tester.pumpAndSettle();
       expect(find.text('Cơm gà'), findsOneWidget);
       expect(
@@ -499,6 +578,33 @@ void main() {
         findsOneWidget,
       );
       expect(payments, 0);
+      final confirmation = find.byWidgetPredicate(
+        (widget) =>
+            widget is AlertDialog && widget.content is SingleChildScrollView,
+      );
+      expect(
+        find.descendant(
+          of: confirmation,
+          matching: find.text('Món chưa phục vụ của bàn A02'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: confirmation, matching: find.text('Cơm gà')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: confirmation, matching: find.text('× 2')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: confirmation, matching: find.text('Trà đào')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: confirmation, matching: find.text('× 1')),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Hủy'));
       await tester.pumpAndSettle();
       expect(payments, 0);
@@ -534,7 +640,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Xem chi tiết hóa đơn'));
+    await tester.tap(find.byKey(const ValueKey('cashier-table-2')));
     await tester.pumpAndSettle();
     expect(find.text('Mất kết nối'), findsOneWidget);
     fail = false;

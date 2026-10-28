@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'invoice_document.dart';
 import 'invoice_editor.dart';
 import 'staff_api.dart';
+import 'table_status.dart';
 
 class InvoiceDialog extends StatefulWidget {
   final StaffApi api;
   final int tableId;
   final Map<String, dynamic>? receipt;
+  final Map<String, dynamic>? tableInfo;
   final void Function(Map<String, dynamic>) onPaid;
   final VoidCallback? onUpdated;
   const InvoiceDialog({
@@ -16,6 +18,7 @@ class InvoiceDialog extends StatefulWidget {
     required this.tableId,
     required this.onPaid,
     this.receipt,
+    this.tableInfo,
     this.onUpdated,
   });
 
@@ -121,19 +124,64 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
 
   Future<void> pay() async {
     if (busy) return;
-    final pending = (invoice!['pendingItems'] as num?)?.toInt() ?? 0;
     setState(() {
       busy = true;
       error = null;
     });
     try {
+      final latest = await widget.api.invoice(widget.tableId);
+      if (!mounted) return;
+      final changed = latest['version'] != invoice!['version'];
+      setState(() {
+        invoice = latest;
+        syncDiscount(latest);
+      });
+      if (changed) {
+        throw StaffApiError(
+          'Hóa đơn đã thay đổi. Vui lòng kiểm tra lại trước khi thanh toán.',
+        );
+      }
+      final unserved = (latest['items'] as List)
+          .cast<Map<String, dynamic>>()
+          .where((item) => item['status'] != 'served')
+          .toList();
+      final pending = unserved.length;
       if (pending > 0) {
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
             title: const Text('Xác nhận thanh toán'),
-            content: Text(
-              'Đơn hàng còn $pending món chưa phục vụ. Bạn có chắc chắn muốn thanh toán ngay không?',
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Đơn hàng còn $pending món chưa phục vụ. Bạn có chắc chắn muốn thanh toán ngay không?',
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Món chưa phục vụ của bàn ${latest['tableCode']}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final item in unserved)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: Text(item['name'] as String)),
+                          const SizedBox(width: 16),
+                          Text(
+                            '× ${item['quantity']}',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -374,13 +422,31 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
     return PopScope(
       canPop: !busy,
       child: AlertDialog(
-        title: const Text('Chi tiết hóa đơn'),
+        title: Text(
+          widget.tableInfo == null
+              ? 'Chi tiết hóa đơn'
+              : 'Chi tiết bàn và hóa đơn',
+        ),
         content: SizedBox(
           width: 340,
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (widget.tableInfo case final table?) ...[
+                  Text(
+                    'Bàn ${table['tableCode']}',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${paid ? 'Đã thanh toán' : tableStatus(table['status'] as String)} · ${table['area']}',
+                  ),
+                  Text('${table['guests']} khách · ${table['seats']} chỗ'),
+                  const Divider(height: 24),
+                ],
                 if (error != null) ...[
                   Text(error!, style: const TextStyle(color: Colors.red)),
                   if (bill == null)

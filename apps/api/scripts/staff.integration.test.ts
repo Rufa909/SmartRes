@@ -61,6 +61,12 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     const cashierPost=(path:string,body:unknown)=>fetch(`${base}/${path}`,{method:'POST',headers:{'Authorization':`Bearer ${cashierToken}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
     assert.equal((await cashierGet('cashier')).status,200);
     assert.equal((await cashierPost('tables/1/seat',{guests:2})).status,403);
+    assert.equal((await fetch(`${base}/cashier/tables`)).status,401);
+    const emptyMap=(await (await cashierGet('cashier/tables')).json()).tables;
+    assert.equal(emptyMap[0].tableCode,'TEST');
+    assert.equal(emptyMap[0].status,'available');
+    assert.equal(emptyMap[0].hasInvoice,false);
+    assert.equal(emptyMap[0].area,'Test');
     assert.equal((await fetch(`${base}/snapshot`)).status,401);
     assert.equal((await post('tables/1/seat',{guests:5})).status,200);
     // Giờ nhận bàn khác giờ gọi món, được giữ nguyên đến khi chốt bill.
@@ -290,7 +296,9 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     await db.query("INSERT INTO restaurant_tables(id,code,name,area) VALUES(3,'EARLY','Thanh toán sớm','Test')");
     assert.equal((await post('tables/3/seat',{guests:2})).status,200);
     assert.equal((await post('orders',{tableId:3,requestId:randomUUID(),items:[{menuItemId:2,quantity:2}]})).status,201);
-    assert.equal((await post('tables/3/request-payment',{})).status,200);
+    const occupiedMap=(await (await cashierGet('cashier/tables')).json()).tables;
+    assert.equal(occupiedMap.find((t:{tableId:number})=>t.tableId===3).status,'dining');
+    assert.equal(occupiedMap.find((t:{tableId:number})=>t.tableId===3).hasInvoice,true);
     const earlyInvoice=(await (await cashierGet('tables/3/invoice')).json()).invoice;
     const earlyBody={paymentMethod:'cash',version:earlyInvoice.version};
     assert.equal((await cashierPost('tables/3/pay',earlyBody)).status,409);
@@ -300,6 +308,9 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     assert.equal(earlyReceipt.paymentStatus,'paid');
     assert.equal(earlyReceipt.pendingItems,1);
     assert.notEqual(earlyReceipt.items[0].status,'served');
+    const settledMap=(await (await cashierGet('cashier/tables')).json()).tables;
+    assert.equal(settledMap.find((t:{tableId:number})=>t.tableId===3).status,'available');
+    assert.equal(settledMap.find((t:{tableId:number})=>t.tableId===3).hasInvoice,false);
     assert.equal((await fetch(`${base}/tables/1/seat`,{method:'POST',headers:{'Authorization':`Bearer ${kitchenToken}`,'Content-Type':'application/json'},body:JSON.stringify({guests:2})})).status,403);
     await stop();server=undefined;
   }finally{

@@ -75,6 +75,13 @@ export function createStaffApp(db: Pool) {
       res.json({ok:true});
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }));
+  app.get('/api/staff/cashier/tables', requireRole('staff','cashier','manager'), route(async (_req,res) => {
+    const [tables] = await db.query<RowDataPacket[]>(`SELECT t.id AS tableId,t.code AS tableCode,t.area,t.seats,t.guests,t.status,
+      t.seated_at AS openedAt,EXISTS(SELECT 1 FROM orders o WHERE o.table_id=t.id
+        AND o.payment_status='unpaid' AND o.status<>'cancelled') AS hasInvoice
+      FROM restaurant_tables t WHERE t.status<>'disabled' ORDER BY t.code`);
+    res.json({tables:tables.map(t=>({...t,tableId:Number(t.tableId),seats:Number(t.seats),guests:Number(t.guests),hasInvoice:Boolean(t.hasInvoice)}))});
+  }));
   app.get('/api/staff/cashier', requireRole('staff','cashier','manager'), route(async (_req,res) => {
     const c=await db.getConnection();
     try {
@@ -97,7 +104,7 @@ export function createStaffApp(db: Pool) {
     try {
       await c.beginTransaction();
       const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
-      if (tables[0]?.status !== 'waiting_payment') throw new ApiError(409,'Bàn chưa được yêu cầu thanh toán.');
+      if (!['dining','waiting_payment'].includes(tables[0]?.status)) throw new ApiError(409,'Bàn không còn đang phục vụ hoặc chờ thanh toán.');
       const invoice = await readInvoice(c,tableId);
       if (!invoice) throw new ApiError(409,'Bàn không còn hóa đơn chưa thanh toán.');
       await c.commit();
@@ -115,7 +122,7 @@ export function createStaffApp(db: Pool) {
     try {
       await c.beginTransaction();
       const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
-      if (tables[0]?.status !== 'waiting_payment') throw new ApiError(409,'Chỉ được sửa hóa đơn chưa thanh toán.');
+      if (!['dining','waiting_payment'].includes(tables[0]?.status)) throw new ApiError(409,'Chỉ được sửa hóa đơn chưa thanh toán.');
       const [orders] = await c.query<RowDataPacket[]>(`SELECT id FROM orders WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled' ORDER BY id FOR UPDATE`,[tableId]);
       await c.query(`SELECT i.id FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.table_id=? AND o.payment_status='unpaid' AND o.status<>'cancelled' FOR UPDATE`,[tableId]);
       const before = await readInvoice(c,tableId);
@@ -171,7 +178,7 @@ export function createStaffApp(db: Pool) {
     try {
       await c.beginTransaction();
       const [tables]=await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
-      if (tables[0]?.status!=='waiting_payment') throw new ApiError(409,'Chỉ áp dụng giảm giá cho hóa đơn chưa thanh toán.');
+      if (!['dining','waiting_payment'].includes(tables[0]?.status)) throw new ApiError(409,'Chỉ áp dụng giảm giá cho hóa đơn chưa thanh toán.');
       const [orders]=await c.query<RowDataPacket[]>(`SELECT id FROM orders WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled' ORDER BY id FOR UPDATE`,[tableId]);
       const before=await readInvoice(c,tableId);
       if (!before || !orders.length) throw new ApiError(409,'Không còn hóa đơn chờ thanh toán.');
@@ -204,7 +211,7 @@ export function createStaffApp(db: Pool) {
     try {
       await c.beginTransaction();
       const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
-      if (tables[0]?.status !== 'waiting_payment') throw new ApiError(409,'Bàn chưa được yêu cầu thanh toán.');
+      if (!['dining','waiting_payment'].includes(tables[0]?.status)) throw new ApiError(409,'Bàn không còn đang phục vụ hoặc chờ thanh toán.');
       const [pending] = await c.query<RowDataPacket[]>(`SELECT i.id FROM order_items i JOIN orders o ON o.id=i.order_id
         WHERE o.table_id=? AND o.payment_status='unpaid' AND o.status<>'cancelled' AND i.status<>'served' LIMIT 1`,[tableId]);
       if (pending.length && !confirmUnserved) throw new ApiError(409,'Đơn hàng còn món chưa phục vụ. Vui lòng xác nhận thanh toán ngay.');
@@ -226,7 +233,7 @@ export function createStaffApp(db: Pool) {
       const receipt = {...invoice,cashierName:currentUser(req).displayName};
       const [saved] = await c.execute<ResultSetHeader>(`INSERT INTO cashier_invoices(invoice_code,table_id,table_code,total_amount,payment_method,paid_at,cashier_name,snapshot)
         VALUES(?,?,?,?,?,?,?,?)`,[invoice.invoiceCode,tableId,invoice.tableCode,invoice.totalAmount,method,paidRows[0].paid_at,receipt.cashierName,JSON.stringify(receipt)]);
-      await c.execute(`UPDATE restaurant_tables SET status='available',guests=0,seated_at=NULL WHERE id=? AND status='waiting_payment'`,[tableId]);
+      await c.execute(`UPDATE restaurant_tables SET status='available',guests=0,seated_at=NULL WHERE id=? AND status IN ('dining','waiting_payment')`,[tableId]);
       await c.commit();
       res.json({ok:true,tableId,paymentMethod:method,totalAmount:invoice.totalAmount,invoice:{...receipt,historyId:saved.insertId}});
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }

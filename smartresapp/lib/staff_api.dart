@@ -85,6 +85,7 @@ class StaffApi {
 
   Future<Map<String, dynamic>> snapshot() => request('snapshot');
   Future<Map<String, dynamic>> cashier() => request('cashier');
+  Future<Map<String, dynamic>> cashierTables() => request('cashier/tables');
   Future<List<Map<String, dynamic>>> cashierMenu() async =>
       ((await request('cashier/menu'))['items'] as List)
           .cast<Map<String, dynamic>>();
