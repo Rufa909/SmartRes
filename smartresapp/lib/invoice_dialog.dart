@@ -121,16 +121,40 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
 
   Future<void> pay() async {
     if (busy) return;
+    final pending = (invoice!['pendingItems'] as num?)?.toInt() ?? 0;
     setState(() {
       busy = true;
       error = null;
     });
     try {
+      if (pending > 0) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Xác nhận thanh toán'),
+            content: Text(
+              'Đơn hàng còn $pending món chưa phục vụ. Bạn có chắc chắn muốn thanh toán ngay không?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Hủy'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Xác nhận thanh toán'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+      }
       final result = await widget.api.pay(
         widget.tableId,
         method,
         orderCodes: invoice!['orderCodes'] as List<dynamic>,
         version: invoice!['version'] as String?,
+        confirmUnserved: pending > 0,
       );
       final receipt = result['invoice'] as Map<String, dynamic>;
       widget.onPaid(receipt);
@@ -366,7 +390,7 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
                   const Center(child: CircularProgressIndicator()),
                 if (bill != null) ...[
                   Text(
-                    'SmartRes • ${bill['invoiceCode']}',
+                    'SmartRes',
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
@@ -377,10 +401,12 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
+                  Text('Mã hóa đơn: ${bill['invoiceCode']}'),
                   Text(
                     'Bàn ${bill['tableCode']} • ${bill['guests'] ?? '—'} khách',
                   ),
                   Text('Ngày giờ: ${invoiceDate(bill['issuedAt'])} (GMT+7)'),
+                  Text('Nhận bàn: ${invoiceDate(bill['openedAt'])} (GMT+7)'),
                   Text(
                     paid ? 'Đã thanh toán' : 'Chưa thanh toán',
                     style: TextStyle(
@@ -556,7 +582,7 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: Text(
-                        'Còn $pending món chưa phục vụ. Chưa thể xác nhận thanh toán.',
+                        'Còn $pending món chưa phục vụ. Bạn có thể xác nhận để thanh toán ngay.',
                       ),
                     ),
                 ],
@@ -571,11 +597,7 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
           ),
           if (bill != null && !paid)
             FilledButton.icon(
-              onPressed:
-                  busy ||
-                      pending > 0 ||
-                      discountDirty ||
-                      bill['discountError'] != null
+              onPressed: busy || discountDirty || bill['discountError'] != null
                   ? null
                   : pay,
               icon: const Icon(Icons.payments_outlined),

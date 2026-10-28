@@ -22,6 +22,7 @@ Map<String, dynamic> invoice({int pending = 0}) => {
   'orderCount': 2,
   'pendingItems': pending,
   'issuedAt': '2026-10-27T12:30:00Z',
+  'openedAt': '2026-10-27T11:15:00Z',
   'paymentStatus': 'unpaid',
   'paymentMethod': null,
   'version': List.filled(64, 'a').join(),
@@ -51,6 +52,10 @@ http.Response jsonResponse(Object body, [int status = 200]) => http.Response(
 );
 
 void main() {
+  test('Ngày giờ hóa đơn dùng giờ Việt Nam và không có năm', () {
+    expect(invoiceDate('2026-12-31T17:05:09Z'), '01/01 00:05:09');
+    expect(invoiceDate(null), '—');
+  });
   testWidgets('Tăng giảm và xóa trực tiếp trên dòng món, tự lưu tổng tiền', (
     tester,
   ) async {
@@ -410,7 +415,8 @@ void main() {
     expect(paid, isFalse);
     expect(find.text('Cơm gà'), findsOneWidget);
     expect(find.text('Trà đào'), findsOneWidget);
-    expect(find.textContaining('27/10/2026 19:30:00'), findsOneWidget);
+    expect(find.textContaining('27/10 19:30:00'), findsOneWidget);
+    expect(find.textContaining('Nhận bàn: 27/10 18:15:00'), findsOneWidget);
     expect(find.text('Tổng tiền: 115.000 đ'), findsOneWidget);
     expect(find.text('In hóa đơn'), findsNothing);
     await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
@@ -432,45 +438,82 @@ void main() {
     expect(find.text('Cơm gà'), findsOneWidget);
   });
 
-  testWidgets('Còn món chưa phục vụ vẫn xem được nhưng không thanh toán', (
-    tester,
-  ) async {
-    final client = MockClient(
-      (req) async => jsonResponse(
-        req.url.path.endsWith('/invoice')
-            ? {'invoice': invoice(pending: 1)}
-            : {
-                'tables': [invoice(pending: 1)],
-              },
-      ),
-    );
-    addTearDown(client.close);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CashierPage(api: StaffApi(client: client), autoRefresh: false),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Chờ phục vụ món'),
-          )
-          .onPressed,
-      isNull,
-    );
-    await tester.tap(find.text('Xem chi tiết hóa đơn'));
-    await tester.pumpAndSettle();
-    expect(find.text('Cơm gà'), findsOneWidget);
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Xác nhận thanh toán'),
-          )
-          .onPressed,
-      isNull,
-    );
-  });
+  testWidgets(
+    'Còn món chưa phục vụ: hủy không thu tiền, xác nhận thì thanh toán',
+    (tester) async {
+      var payments = 0;
+      final client = MockClient((req) async {
+        if (req.url.path.endsWith('/pay')) {
+          payments++;
+          expect(jsonDecode(req.body)['confirmUnserved'], isTrue);
+          return jsonResponse({
+            'invoice': {
+              ...invoice(pending: 2),
+              'paymentStatus': 'paid',
+              'paymentMethod': 'cash',
+            },
+          });
+        }
+        return jsonResponse(
+          req.url.path.endsWith('/invoice')
+              ? {'invoice': invoice(pending: 2)}
+              : {
+                  'tables': [invoice(pending: 2)],
+                },
+        );
+      });
+      addTearDown(client.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CashierPage(api: StaffApi(client: client), autoRefresh: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Thanh toán'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(find.text('Xem chi tiết hóa đơn'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cơm gà'), findsOneWidget);
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Xác nhận thanh toán'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Xác nhận thanh toán'),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Đơn hàng còn 2 món chưa phục vụ. Bạn có chắc chắn muốn thanh toán ngay không?',
+        ),
+        findsOneWidget,
+      );
+      expect(payments, 0);
+      await tester.tap(find.text('Hủy'));
+      await tester.pumpAndSettle();
+      expect(payments, 0);
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Xác nhận thanh toán'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Xác nhận thanh toán').last,
+      );
+      await tester.pumpAndSettle();
+      expect(payments, 1);
+      expect(find.text('Đã thanh toán'), findsOneWidget);
+    },
+  );
 
   testWidgets('Lỗi tải chi tiết có thể thử lại', (tester) async {
     var fail = true;

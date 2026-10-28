@@ -63,6 +63,9 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     assert.equal((await cashierPost('tables/1/seat',{guests:2})).status,403);
     assert.equal((await fetch(`${base}/snapshot`)).status,401);
     assert.equal((await post('tables/1/seat',{guests:5})).status,200);
+    // Giờ nhận bàn khác giờ gọi món, được giữ nguyên đến khi chốt bill.
+    await db.query("UPDATE restaurant_tables SET seated_at='2026-10-28 10:15:30' WHERE id=1");
+    const [seatedRows] = await db.query<RowDataPacket[]>('SELECT seated_at FROM restaurant_tables WHERE id=1');
     assert.equal((await post('tables/1/request-payment',{})).status,409);
     assert.equal((await post('tables/1/seat',{guests:2})).status,409);
     const requestId=randomUUID();
@@ -109,6 +112,9 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     const previewResponse = await cashierGet('tables/1/invoice');
     assert.equal(previewResponse.status,200);
     const {invoice} = await previewResponse.json();
+    assert.equal(invoice.openedAt, seatedRows[0].seated_at.toISOString());
+    assert.match(invoice.invoiceCode, /^\d{4}-TEST-\d{4}$/);
+    assert.equal(cashier.tables[0].invoiceCode, invoice.invoiceCode);
     assert.equal(invoice.totalAmount,115000);
     assert.equal(invoice.items.length,2);
     assert.equal(invoice.items[0].name,'Cơm');
@@ -260,6 +266,7 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     const oldReceipt=(await (await cashierGet(`cashier/history/${firstHistoryId}`)).json()).invoice;
     assert.equal(oldReceipt.totalAmount,115000);
     const persisted=(await (await cashierGet(`cashier/history/${secondReceipt.historyId}`)).json()).invoice;
+    assert.equal(persisted.invoiceCode, secondReceipt.invoiceCode);
     assert.equal(persisted.items[0].name,'Cơm');
     assert.equal(persisted.items[0].unitPrice,45000);
     assert.equal(persisted.guests,2);
@@ -273,9 +280,26 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     await db.query("INSERT INTO orders(order_code,request_id,request_hash,table_id,payment_status,payment_method,paid_at,total_amount) VALUES('SR-legacy','legacy',REPEAT('a',64),2,'paid','cash','2025-01-01 10:00:00',45000)");
     const [legacyOrders]=await db.query<RowDataPacket[]>("SELECT id FROM orders WHERE order_code='SR-legacy'");
     await db.execute("INSERT INTO order_items(order_id,menu_item_id,item_name,quantity,unit_price,status) VALUES(?,1,'Cơm cũ',1,45000,'served')",[legacyOrders[0].id]);
+    // Existing databases can use different collations for original and added tables.
+    await db.query('ALTER TABLE cashier_invoices MODIFY payment_method VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL');
+    await db.query("ALTER TABLE orders MODIFY payment_method ENUM('cash','bank_transfer','card') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL");
     await ensureInvoiceStorage(db);
     await ensureInvoiceStorage(db);
     assert.equal((await (await cashierGet('cashier/history')).json()).total,3);
+    // Cashier can explicitly settle a bill while dishes are still unserved.
+    await db.query("INSERT INTO restaurant_tables(id,code,name,area) VALUES(3,'EARLY','Thanh toán sớm','Test')");
+    assert.equal((await post('tables/3/seat',{guests:2})).status,200);
+    assert.equal((await post('orders',{tableId:3,requestId:randomUUID(),items:[{menuItemId:2,quantity:2}]})).status,201);
+    assert.equal((await post('tables/3/request-payment',{})).status,200);
+    const earlyInvoice=(await (await cashierGet('tables/3/invoice')).json()).invoice;
+    const earlyBody={paymentMethod:'cash',version:earlyInvoice.version};
+    assert.equal((await cashierPost('tables/3/pay',earlyBody)).status,409);
+    const earlyPayment=await cashierPost('tables/3/pay',{...earlyBody,confirmUnserved:true});
+    assert.equal(earlyPayment.status,200);
+    const earlyReceipt=(await earlyPayment.json()).invoice;
+    assert.equal(earlyReceipt.paymentStatus,'paid');
+    assert.equal(earlyReceipt.pendingItems,1);
+    assert.notEqual(earlyReceipt.items[0].status,'served');
     assert.equal((await fetch(`${base}/tables/1/seat`,{method:'POST',headers:{'Authorization':`Bearer ${kitchenToken}`,'Content-Type':'application/json'},body:JSON.stringify({guests:2})})).status,403);
     await stop();server=undefined;
   }finally{

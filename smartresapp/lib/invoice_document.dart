@@ -19,7 +19,7 @@ String invoiceDate(dynamic value) {
   // Nhà hàng sử dụng giờ Việt Nam, kể cả khi thiết bị ở múi giờ khác.
   final local = date.toUtc().add(const Duration(hours: 7));
   String pad(int v) => v.toString().padLeft(2, '0');
-  return '${pad(local.day)}/${pad(local.month)}/${local.year} '
+  return '${pad(local.day)}/${pad(local.month)} '
       '${pad(local.hour)}:${pad(local.minute)}:${pad(local.second)}';
 }
 
@@ -60,11 +60,12 @@ Future<({Uint8List bytes, PdfPageFormat format})> _buildReceipt(
               ),
             ),
             pw.SizedBox(height: 8),
-            pw.Text('Số bill: ${invoice['invoiceCode']}'),
+            pw.Text('Mã hóa đơn: ${invoice['invoiceCode']}'),
             pw.Text(
               'Bàn ${invoice['tableCode']} • ${invoice['guests'] ?? '—'} khách',
             ),
             pw.Text('Ngày: ${invoiceDate(invoice['issuedAt'])}'),
+            pw.Text('Nhận bàn: ${invoiceDate(invoice['openedAt'])}'),
             pw.Divider(thickness: 0.5, height: 14),
             pw.Row(
               children: [

@@ -130,10 +130,12 @@ class StaffApi {
     String paymentMethod, {
     List<dynamic>? orderCodes,
     String? version,
+    bool confirmUnserved = false,
   }) => request('tables/$tableId/pay', {
     'paymentMethod': paymentMethod,
     'orderCodes': ?orderCodes,
     'version': ?version,
+    'confirmUnserved': confirmUnserved,
   });
 
   Future<void> seat(int tableId, int guests) async {

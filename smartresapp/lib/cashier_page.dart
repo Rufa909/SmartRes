@@ -196,6 +196,8 @@ class _CashierPageState extends State<CashierPage> {
                               ],
                             ),
                             const SizedBox(height: 8),
+                            if (bill['invoiceCode'] != null)
+                              Text('Mã hóa đơn: ${bill['invoiceCode']}'),
                             Text(
                               '${bill['guests']} khách · ${pending == 0 ? 'Món đã phục vụ hết' : 'Còn $pending món chưa phục vụ'}',
                             ),
@@ -215,11 +217,9 @@ class _CashierPageState extends State<CashierPage> {
                             ),
                             const SizedBox(height: 8),
                             FilledButton.icon(
-                              onPressed: pending > 0 ? null : () => pay(bill),
+                              onPressed: () => pay(bill),
                               icon: const Icon(Icons.payments_outlined),
-                              label: Text(
-                                pending > 0 ? 'Chờ phục vụ món' : 'Thanh toán',
-                              ),
+                              label: const Text('Thanh toán'),
                             ),
                           ],
                         ),

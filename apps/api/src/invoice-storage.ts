@@ -7,6 +7,12 @@ export function parseInvoiceSnapshot(value: unknown): Record<string, unknown> {
 
 // Additive migration, also used by the local setup command and integration tests.
 export async function ensureInvoiceStorage(db: Pool) {
+  const [seated] = await db.query<RowDataPacket[]>("SHOW COLUMNS FROM restaurant_tables LIKE 'seated_at'");
+  if (!seated.length) {
+    await db.query('ALTER TABLE restaurant_tables ADD COLUMN seated_at TIMESTAMP NULL').catch((error: {code?:string}) => {
+      if (error.code !== 'ER_DUP_FIELDNAME') throw error;
+    });
+  }
   const [notes] = await db.query<RowDataPacket[]>("SHOW COLUMNS FROM order_items LIKE 'note'");
   if (!notes.length) {
     await db.query('ALTER TABLE order_items ADD COLUMN note TEXT NULL').catch((error: {code?:string}) => {
@@ -21,7 +27,8 @@ export async function ensureInvoiceStorage(db: Pool) {
     FROM orders o JOIN restaurant_tables t ON t.id=o.table_id
     WHERE o.payment_status='paid' AND o.status<>'cancelled' AND o.paid_at IS NOT NULL
     GROUP BY o.table_id,t.code,o.paid_at,o.payment_method) bill
-    LEFT JOIN cashier_invoices h ON h.invoice_code=CONCAT('HD-',bill.firstId) WHERE h.id IS NULL`);
+    LEFT JOIN cashier_invoices h ON h.table_id=bill.tableId AND h.paid_at=bill.paidAt
+      AND BINARY h.payment_method <=> BINARY bill.paymentMethod WHERE h.id IS NULL`);
   for (const group of groups) {
     const [orders] = await db.query<RowDataPacket[]>(`SELECT id,order_code AS orderCode,created_at AS createdAt
       FROM orders WHERE table_id=? AND paid_at=? AND payment_method <=> ? AND payment_status='paid' AND status<>'cancelled' ORDER BY id`,[group.tableId,group.paidAt,group.paymentMethod]);
