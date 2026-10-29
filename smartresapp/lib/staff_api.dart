@@ -24,17 +24,26 @@ class StaffApi {
 
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
-      final response = await client.post(Uri.parse('$baseUrl/api/auth/login'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'username': username, 'password': password}));
-      final data = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final response = await client.post(
+        Uri.parse('$baseUrl/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': username, 'password': password}),
+      );
+      final data =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StaffApiError(data['message'] as String? ?? 'Đăng nhập thất bại.');
+        throw StaffApiError(
+          data['message'] as String? ?? 'Đăng nhập thất bại.',
+        );
       }
       token = data['token'] as String;
       return data;
-    } on StaffApiError { rethrow; } catch (_) {
-      throw StaffApiError('Không kết nối được máy chủ. Kiểm tra backend và kết nối thiết bị.');
+    } on StaffApiError {
+      rethrow;
+    } catch (_) {
+      throw StaffApiError(
+        'Không kết nối được máy chủ. Kiểm tra backend và kết nối thiết bị.',
+      );
     }
   }
 
@@ -57,11 +66,7 @@ class StaffApi {
       final response =
           await (body == null
                   ? client.get(url, headers: headers)
-                  : client.post(
-                      url,
-                      headers: headers,
-                      body: jsonEncode(body),
-                    ))
+                  : client.post(url, headers: headers, body: jsonEncode(body)))
               .timeout(const Duration(seconds: 10));
       final data =
           jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -80,9 +85,59 @@ class StaffApi {
 
   Future<Map<String, dynamic>> snapshot() => request('snapshot');
   Future<Map<String, dynamic>> cashier() => request('cashier');
-  Future<void> pay(int tableId, String paymentMethod) async {
-    await request('tables/$tableId/pay', {'paymentMethod': paymentMethod});
-  }
+  Future<Map<String, dynamic>> cashierTables() => request('cashier/tables');
+  Future<List<Map<String, dynamic>>> cashierMenu() async =>
+      ((await request('cashier/menu'))['items'] as List)
+          .cast<Map<String, dynamic>>();
+  Future<Map<String, dynamic>> saveInvoice(
+    int tableId,
+    String version,
+    List<Map<String, dynamic>> items,
+    String reason,
+  ) async =>
+      (await request('tables/$tableId/invoice', {
+            'version': version,
+            'items': items,
+            'reason': reason,
+          }))['invoice']
+          as Map<String, dynamic>;
+  Future<Map<String, dynamic>> invoiceHistory({
+    String query = '',
+    int offset = 0,
+  }) => request(
+    'cashier/history?q=${Uri.encodeQueryComponent(query)}&offset=$offset',
+  );
+  Future<Map<String, dynamic>> savedInvoice(int id) async =>
+      (await request('cashier/history/$id'))['invoice'] as Map<String, dynamic>;
+  Future<Map<String, dynamic>> invoice(int tableId) async =>
+      (await request('tables/$tableId/invoice'))['invoice']
+          as Map<String, dynamic>;
+  Future<Map<String, dynamic>> applyDiscount(
+    int tableId,
+    String version,
+    String mode, {
+    num? percentage,
+    String? code,
+  }) async =>
+      (await request('tables/$tableId/discount', {
+            'version': version,
+            'mode': mode,
+            if (mode == 'manual') 'percentage': percentage,
+            if (mode == 'voucher') 'code': code,
+          }))['invoice']
+          as Map<String, dynamic>;
+  Future<Map<String, dynamic>> pay(
+    int tableId,
+    String paymentMethod, {
+    List<dynamic>? orderCodes,
+    String? version,
+    bool confirmUnserved = false,
+  }) => request('tables/$tableId/pay', {
+    'paymentMethod': paymentMethod,
+    'orderCodes': ?orderCodes,
+    'version': ?version,
+    'confirmUnserved': confirmUnserved,
+  });
 
   Future<void> seat(int tableId, int guests) async {
     await request('tables/$tableId/seat', {'guests': guests});

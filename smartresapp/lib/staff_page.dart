@@ -8,18 +8,13 @@ import 'restaurant_theme.dart';
 import 'order_catalogue.dart';
 import 'ready_alert.dart';
 import 'cashier_page.dart';
+import 'table_status.dart';
 
 import 'package:flutter/services.dart';
 
 const staffGreen = brandOrange;
 String staffMoney(num value) =>
     '${value.toInt().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ';
-String tableStatus(String s) => switch (s) {
-  'available' => 'Trống',
-  'dining' => 'Đang phục vụ',
-  'waiting_payment' => 'Chờ thanh toán',
-  _ => 'Tạm khóa',
-};
 String itemStatus(String s) => switch (s) {
   'preparing' => 'Chờ bếp',
   'cooking' => 'Đang nấu',
@@ -145,11 +140,7 @@ class _StaffPageState extends State<StaffPage> {
     }
   }
 
-  Color statusColor(String s) => s == 'available'
-      ? staffGreen
-      : s == 'waiting_payment'
-      ? const Color(0xFFB06B16)
-      : const Color(0xFF3665AC);
+  Color statusColor(String s) => tableStatusColor(s);
 
   @override
   Widget build(BuildContext context) => Theme(

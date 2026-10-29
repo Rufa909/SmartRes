@@ -14,6 +14,10 @@ export class OrderService {
     return order;
   }
 
+  requestPayment(orderCode: string) {
+    return this.orderRepository.requestPayment(orderCode);
+  }
+
   async updateStatus(orderId: string, status: string) {
     const order = await this.orderRepository.updateStatus(orderId, status);
     publishDomainEvent("order.status_updated", order);

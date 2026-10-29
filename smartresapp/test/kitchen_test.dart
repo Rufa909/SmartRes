@@ -2,12 +2,83 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:smartresapp/ready_alert.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:smartresapp/kitchen_page.dart';
 import 'package:smartresapp/staff_api.dart';
 
 void main() {
+  testWidgets(
+    'Bếp báo món mới một lần, kể cả ngoài bộ lọc và thay món cùng số lượng',
+    (tester) async {
+      var sounds = 0;
+      var offline = false;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        ReadyAlert.channel,
+        (call) async {
+          if (call.method == 'play') sounds++;
+          return true;
+        },
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          ReadyAlert.channel,
+          null,
+        ),
+      );
+      Map<String, dynamic> dish(int id, String status, String table) => {
+        'id': id,
+        'name': 'Món $id',
+        'tableCode': table,
+        'quantity': 1,
+        'status': status,
+        'orderCode': 'SR-$id',
+        'createdAt': '2026-10-28T12:00:00Z',
+      };
+      var items = [dish(1, 'cooking', 'A01')];
+      final client = MockClient(
+        (_) async => offline
+            ? http.Response('{"message":"Offline"}', 503)
+            : http.Response(
+                jsonEncode({'items': items}),
+                200,
+                headers: {'content-type': 'application/json; charset=utf-8'},
+              ),
+      );
+      addTearDown(client.close);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: KitchenPage(api: StaffApi(client: client), autoRefresh: false),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(sounds, 0);
+      await tester.tap(find.text('Đang nấu (1)'));
+      await tester.pumpAndSettle();
+      items = [dish(1, 'cooking', 'A01'), dish(2, 'preparing', 'B02')];
+      await tester.tap(find.byTooltip('Tải lại bếp'));
+      await tester.pumpAndSettle();
+      expect(sounds, 1);
+      await tester.tap(find.byTooltip('Tải lại bếp'));
+      await tester.pumpAndSettle();
+      expect(sounds, 1);
+      items = [dish(1, 'cooking', 'A01'), dish(3, 'preparing', 'B02')];
+      offline = true;
+      await tester.tap(find.byTooltip('Tải lại bếp'));
+      await tester.pumpAndSettle();
+      expect(sounds, 1);
+      offline = false;
+      await tester.tap(find.byTooltip('Tải lại bếp'));
+      await tester.pumpAndSettle();
+      expect(sounds, 2);
+      items = [dish(1, 'cooking', 'A01'), dish(3, 'cooking', 'B02')];
+      await tester.tap(find.byTooltip('Tải lại bếp'));
+      await tester.pumpAndSettle();
+      expect(sounds, 2);
+    },
+  );
+
   testWidgets('Lọc bàn, đếm phần và khóa thao tác khi mất kết nối', (
     tester,
   ) async {

@@ -1,14 +1,36 @@
 param(
   [string]$ProjectRoot = 'A:\DoAn\SmartRes',
   [string]$AvdName = 'Medium_Phone',
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [switch]$CheckOnly
 )
 
 $ErrorActionPreference = 'Stop'
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
+$ProjectRoot = [System.IO.Path]::GetFullPath($ProjectRoot)
+$properties = @{}
+$propertiesFile = Join-Path $ProjectRoot 'smartresapp\android\local.properties'
+if (Test-Path -LiteralPath $propertiesFile) {
+  foreach ($line in Get-Content -LiteralPath $propertiesFile) {
+    if ($line -match '^(sdk\.dir|flutter\.sdk)=(.*)$') {
+      $properties[$matches[1]] = $matches[2].Replace('\\', '\').Replace('\:', ':')
+    }
+  }
+}
+$sdkCandidates = @(
+  $env:ANDROID_HOME,
+  $env:ANDROID_SDK_ROOT,
+  $properties['sdk.dir'],
+  (Join-Path $env:USERPROFILE 'AppData\Local\Android\Sdk'),
+  (Join-Path $env:LOCALAPPDATA 'Android\Sdk')
+)
+$sdk = $sdkCandidates | Where-Object { $_ -and (Test-Path -LiteralPath (Join-Path $_ 'platform-tools\adb.exe')) } | Select-Object -First 1
+if (-not $sdk) { $sdk = Join-Path $env:USERPROFILE 'AppData\Local\Android\Sdk' }
 $adb = Join-Path $sdk 'platform-tools\adb.exe'
 $emulator = Join-Path $sdk 'emulator\emulator.exe'
-$flutter = 'C:\flutter\bin\flutter.bat'
+$flutterCommand = Get-Command flutter.bat -ErrorAction SilentlyContinue
+$flutter = if ($flutterCommand) { $flutterCommand.Source } elseif ($properties['flutter.sdk']) {
+  Join-Path $properties['flutter.sdk'] 'bin\flutter.bat'
+} else { 'C:\flutter\bin\flutter.bat' }
 $apiUrl = 'http://127.0.0.1:4000/api/health'
 
 function Test-ApiReady {
@@ -20,18 +42,32 @@ function Test-ApiReady {
 
 function Fail($message) {
   Write-Host "`n[LOI] $message" -ForegroundColor Red
-  Read-Host 'Nhan Enter de dong'
+  if (-not $CheckOnly) { Read-Host 'Nhan Enter de dong' }
   exit 1
 }
 
 if (-not (Test-Path $ProjectRoot)) { Fail "Khong tim thay thu muc du an: $ProjectRoot" }
+if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot 'apps\api\package.json'))) { Fail "Thu muc khong phai du an SmartRes: $ProjectRoot" }
 if (-not (Test-Path $adb)) { Fail "Khong tim thay adb: $adb`nHay mo Android Studio va cai Android SDK Platform-Tools." }
 if (-not (Test-Path $emulator)) { Fail "Khong tim thay Android Emulator: $emulator" }
 if (-not (Test-Path $flutter)) { Fail "Khong tim thay Flutter tai $flutter" }
+if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { Fail 'Khong tim thay npm. Hay cai Node.js va them vao PATH.' }
+
+Write-Host "Du an: $ProjectRoot"
+Write-Host "Flutter: $flutter"
+Write-Host "Android SDK: $sdk"
+Write-Host "May ao: $AvdName"
+if ($CheckOnly) {
+  $avds = @(& $emulator -list-avds)
+  if ($LASTEXITCODE -ne 0 -or $avds -notcontains $AvdName) { Fail "Khong tim thay AVD '$AvdName'. May ao hien co: $($avds -join ', ')" }
+  Write-Host 'Cac duong dan va may ao hop le.' -ForegroundColor Green
+  exit 0
+}
 
 Write-Host '[1/5] Kiem tra va khoi dong backend...' -ForegroundColor Cyan
 if (-not (Test-ApiReady)) {
-  Start-Process powershell.exe -ArgumentList '-NoExit','-NoProfile','-Command',("Set-Location -LiteralPath '{0}'; npm --workspace apps/api run dev:staff" -f $ProjectRoot)
+  $staffCommand = "Set-Location -LiteralPath '{0}'; npm.cmd --workspace apps/api run dev:staff" -f $ProjectRoot.Replace("'", "''")
+  Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-Command',('"' + $staffCommand + '"')
   $ready = $false
   for ($i = 0; $i -lt 60 -and -not $ready; $i++) {
     Start-Sleep -Seconds 1
@@ -46,7 +82,7 @@ $devices = (& $adb devices) | Select-String 'emulator-\d+\s+device'
 if (-not $devices) {
   $avds = (& $emulator -list-avds)
   if ($avds -notcontains $AvdName) { Fail "Khong tim thay AVD '$AvdName'. Mo Android Studio > Device Manager de tao/doi ten may ao." }
-  Start-Process -FilePath $emulator -ArgumentList '-avd',$AvdName,'-no-snapshot-load' | Out-Null
+  Start-Process -FilePath $emulator -WindowStyle Hidden -ArgumentList '-avd',$AvdName,'-no-snapshot-load' | Out-Null
   $connected = $false
   for ($i = 0; $i -lt 90 -and -not $connected; $i++) {
     Start-Sleep -Seconds 2
@@ -72,6 +108,7 @@ if (-not $SkipBuild -or -not (Test-Path $apk)) {
   finally { Pop-Location }
 }
 & $adb -s $serial install -r $apk | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail 'Cai APK that bai. Kiem tra ket noi may ao.' }
 
 Write-Host '[4/5] Mo app SmartRes Nhan vien...' -ForegroundColor Cyan
 & $adb -s $serial shell am force-stop com.example.smartresapp

@@ -12,6 +12,8 @@ try {
   await c.changeUser({ database });
   const schema = await readFile(new URL('../../../database/staff-schema.sql', import.meta.url), 'utf8');
   for (const sql of schema.split(';').filter(s => s.trim())) await c.query(sql);
+  const cashierSchema = await readFile(new URL('../../../database/cashier-schema.sql', import.meta.url), 'utf8');
+  for (const sql of cashierSchema.split(';').filter(s => s.trim())) await c.query(sql);
   await c.query("ALTER TABLE users MODIFY COLUMN role ENUM('staff','kitchen','cashier','manager') NOT NULL");
   const passwordHash = (password) => {
     const salt = randomBytes(16).toString('hex');

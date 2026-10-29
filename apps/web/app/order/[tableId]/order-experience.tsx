@@ -110,6 +110,25 @@ export function OrderExperience({ tableId }: { tableId: string }) {
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderCode, setOrderCode] = useState<string | null>(null);
+  const [requestingPayment, setRequestingPayment] = useState(false);
+  const [paymentRequested, setPaymentRequested] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  async function requestPayment() {
+    if (!orderCode || requestingPayment || paymentRequested) return;
+    setRequestingPayment(true);
+    setPaymentError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/orders/${encodeURIComponent(orderCode)}/request-payment`, { method: "POST" });
+      const data = await response.json() as { message?: string };
+      if (!response.ok) throw new Error(data.message || "Không gửi được yêu cầu thanh toán.");
+      setPaymentRequested(true);
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : "Không kết nối được máy chủ.");
+    } finally {
+      setRequestingPayment(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -265,6 +284,15 @@ export function OrderExperience({ tableId }: { tableId: string }) {
             </section>
 
             {menuError && <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">{menuError}</p>}
+            {orderCode && (
+              <div className="mt-4 rounded-2xl border border-coral/20 bg-white p-4" aria-live="polite">
+                <button type="button" disabled={requestingPayment || paymentRequested} onClick={requestPayment} className="rounded-xl bg-coral px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+                  {paymentRequested ? "Đã gửi yêu cầu đến thu ngân" : requestingPayment ? "Đang gửi..." : "Yêu cầu thanh toán"}
+                </button>
+                {paymentRequested && <p className="mt-2 text-sm text-slate-600">Vui lòng chờ nhân viên kiểm tra hóa đơn và xác nhận phương thức thanh toán.</p>}
+                {paymentError && <p role="alert" className="mt-2 text-sm text-red-700">{paymentError}</p>}
+              </div>
+            )}
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative min-w-0 flex-1">

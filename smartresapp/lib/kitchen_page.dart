@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'staff_api.dart';
 import 'restaurant_theme.dart';
+import 'ready_alert.dart';
 
 const kitchenBlue = brandOrange;
 
@@ -32,6 +33,8 @@ class _KitchenPageState extends State<KitchenPage> {
       .inMinutes;
   String? error;
   List<Map<String, dynamic>> items = [];
+  final newItemAlert = ReadyAlert();
+  final Set<int> knownItemIds = {};
   static const labels = {
     'preparing': 'Chờ bếp',
     'cooking': 'Đang nấu',
@@ -73,11 +76,17 @@ class _KitchenPageState extends State<KitchenPage> {
                 b['createdAt'] as String,
               ),
             );
+      final hasNewItems = next.any(
+        (item) =>
+            item['status'] == 'preparing' && !knownItemIds.contains(item['id']),
+      );
+      knownItemIds.addAll(next.map((item) => item['id'] as int));
       setState(() {
         items = next;
         lastSynced = DateTime.now();
         error = null;
       });
+      if (hasNewItems) unawaited(newItemAlert.play());
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     } finally {
@@ -361,6 +370,14 @@ class _KitchenPageState extends State<KitchenPage> {
                                           ),
                                         ),
                                         const SizedBox(height: 8),
+                                        if ((item['note'] as String? ?? '')
+                                            .isNotEmpty)
+                                          Text(
+                                            'Ghi chú: ${item['note']}',
+                                            style: const TextStyle(
+                                              color: Color(0xFFB45309),
+                                            ),
+                                          ),
                                         Text(
                                           'Đơn ${item['orderCode']}',
                                           style: const TextStyle(

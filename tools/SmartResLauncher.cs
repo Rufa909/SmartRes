@@ -18,6 +18,11 @@ internal static class SmartResLauncher
 
         var ps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
         var quotedArgs = string.Join(" ", Array.ConvertAll(args, a => "\"" + a.Replace("\"", "\\\"") + "\""));
+        if (!Array.Exists(args, a => a.Equals("-ProjectRoot", StringComparison.OrdinalIgnoreCase)))
+        {
+            var projectRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
+            quotedArgs = "-ProjectRoot \"" + projectRoot + "\" " + quotedArgs;
+        }
         var process = Process.Start(new ProcessStartInfo
         {
             FileName = ps,

@@ -34,4 +34,9 @@ export class OrderController {
     const order = await this.orderService.updateStatus(orderId, status);
     res.json({ order });
   };
+
+  requestPayment = async (req: Request, res: Response) => {
+    const orderCode = z.string().regex(/^SR-[0-9a-f-]{36}$/i).parse(req.params.orderCode);
+    res.json(await this.orderService.requestPayment(orderCode));
+  };
 }
