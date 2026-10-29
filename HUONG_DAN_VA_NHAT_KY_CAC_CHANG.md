@@ -452,3 +452,11 @@ Màn hình thu ngân và API thu tiền đã có từ chặng trước, nhưng t
 **Kiểm thử chặng:** MySQL migration/setup đạt; TypeScript typecheck đạt; test tích hợp đạt 1/1; Flutter analyzer không lỗi; Flutter test đạt 16/16; APK debug build thành công và launcher đã cài/mở app trên `emulator-5554`.
 
 **Giới hạn còn lại:** token hiện lưu trong bộ nhớ app nên đóng app sẽ đăng nhập lại; chưa có refresh token, đổi mật khẩu, khóa tài khoản sau nhiều lần sai, nhật ký audit và màn hình quản lý người dùng. Các phần này thuộc chặng bảo mật/vận hành tiếp theo.
+
+### Sửa QR bàn không mở được trên điện thoại — 29/10/2026
+
+**Nguyên nhân xác nhận:** các ảnh QR đã tạo trước đó chứa URL `http://192.168.2.46:3000`, trong khi địa chỉ Wi-Fi hiện tại của máy chạy SmartRes là `192.168.2.50`. Đồng thời Customer Web ở cổng 3000 và Customer API ở cổng 4010 chưa chạy, nên Safari báo không thể kết nối tới máy chủ.
+
+**Đã xử lý:** script `apps/api/scripts/generate-table-qrs.mjs` tự tìm địa chỉ IPv4 LAN khi chưa đặt `NEXT_PUBLIC_WEB_URL`, đồng thời cảnh báo nếu QR dùng `localhost` hoặc `127.0.0.1`. Đã tạo lại 8 ảnh QR với URL `http://192.168.2.50:3000/order/<mã-bàn>`, khởi động Customer API và web, rồi kiểm tra trang A01 cùng API menu qua chính địa chỉ LAN đều trả HTTP 200. Web lắng nghe `0.0.0.0:3000`; API menu được Next.js proxy nội bộ tới cổng 4010 nên điện thoại chỉ cần truy cập cổng 3000.
+
+**Khi mở lại máy hoặc đổi mạng:** máy tính và điện thoại phải cùng Wi-Fi; chạy `npm run dev:customer-api`, `npm run dev:web`, sau đó `npm run generate:qr` nếu IP máy tính thay đổi. Với môi trường nhà hàng thật nên dùng tên miền HTTPS hoặc IP tĩnh và đặt `NEXT_PUBLIC_WEB_URL` để không phải in lại QR. Nếu URL LAN vẫn không mở được từ thiết bị khác, kiểm tra tính năng AP/client isolation của router và cho phép TCP 3000 trong Windows Firewall ở profile Private. Phiên sửa tự động không tạo được rule Firewall vì Windows yêu cầu quyền Administrator.

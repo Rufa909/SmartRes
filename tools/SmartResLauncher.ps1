@@ -1,5 +1,5 @@
 param(
-  [string]$ProjectRoot = 'D:\DoAn4\SmartRes',
+  [string]$ProjectRoot = 'A:\DoAn\SmartRes',
   [string]$AvdName = 'Medium_Phone',
   [switch]$SkipBuild
 )

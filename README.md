@@ -55,3 +55,23 @@ uvicorn app.main:app --reload --port 8000
 
 Xem [docs/architecture.md](docs/architecture.md) de nam kien truc, module, luong du lieu va roadmap trien khai.
 
+## QR ban tren dien thoai
+
+Dien thoai va may tinh phai cung mang Wi-Fi/LAN. Chay Customer API va web:
+
+```powershell
+npm run dev:customer-api
+npm run dev:web
+```
+
+Sau do tao lai QR, nhat la khi dia chi IP cua may tinh thay doi:
+
+```powershell
+npm run generate:qr
+```
+
+Script tu chon dia chi IPv4 LAN hien tai. Neu nha hang co ten mien HTTPS co dinh, dat
+`NEXT_PUBLIC_WEB_URL` (vi du `https://order.example.com`) truoc khi tao QR de ma khong
+bi thay doi theo dia chi Wi-Fi. Khong dung `localhost` hay `127.0.0.1` trong QR vi tren
+dien thoai cac dia chi nay tro ve chinh dien thoai, khong phai may tinh chay SmartRes.
+
