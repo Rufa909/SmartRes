@@ -6,6 +6,8 @@
     "packages/*"
   ],
   "scripts": {
+    "setup:customer": "npm --workspace apps/api run db:staff && npm --workspace apps/api run db:customer && npm run generate:qr",
+    "dev:customer": "node scripts/dev-customer.mjs",
     "dev:web": "npm --workspace apps/web run dev",
     "dev:api": "npm --workspace apps/api run dev",
     "dev:customer-api": "npm --workspace apps/api run dev:customer",

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { readFile } from 'node:fs/promises';
 import { randomBytes, scryptSync } from 'node:crypto';
 dotenv.config({ path: new URL('../../../.env.mysql.local', import.meta.url), quiet: true });
+dotenv.config({ path: new URL('../../../.env', import.meta.url), quiet: true });
 const database = process.env.MYSQL_DATABASE;
 if (database !== 'smartres_staff') throw new Error('Setup chỉ dành cho database smartres_staff.');
 const c = await mysql.createConnection({ host: process.env.MYSQL_HOST, port: Number(process.env.MYSQL_PORT || 3306),

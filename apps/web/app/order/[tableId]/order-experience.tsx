@@ -57,6 +57,16 @@ const extraPrices: Record<string, number> = {};
 // Gọi cùng tên miền với trang web; Next.js sẽ proxy tới Customer API ở máy chủ.
 const apiBaseUrl = "/api/customer";
 
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 function formatPrice(value: number) {
   return `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
 }
@@ -132,7 +142,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`${apiBaseUrl}/menu`)
+    fetchWithTimeout(`${apiBaseUrl}/menu`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Không tải được thực đơn.");
         const data = await response.json() as { items: Array<{ id: number; name: string; description: string | null; price: number | string; category: string; emoji?: string | null }> };
@@ -199,7 +209,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
     setIsOrdering(true);
     setOrderError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/orders`, {
+      const response = await fetchWithTimeout(`${apiBaseUrl}/orders`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

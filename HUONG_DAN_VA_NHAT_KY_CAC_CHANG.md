@@ -460,3 +460,11 @@ Màn hình thu ngân và API thu tiền đã có từ chặng trước, nhưng t
 **Đã xử lý:** script `apps/api/scripts/generate-table-qrs.mjs` tự tìm địa chỉ IPv4 LAN khi chưa đặt `NEXT_PUBLIC_WEB_URL`, đồng thời cảnh báo nếu QR dùng `localhost` hoặc `127.0.0.1`. Đã tạo lại 8 ảnh QR với URL `http://192.168.2.50:3000/order/<mã-bàn>`, khởi động Customer API và web, rồi kiểm tra trang A01 cùng API menu qua chính địa chỉ LAN đều trả HTTP 200. Web lắng nghe `0.0.0.0:3000`; API menu được Next.js proxy nội bộ tới cổng 4010 nên điện thoại chỉ cần truy cập cổng 3000.
 
 **Khi mở lại máy hoặc đổi mạng:** máy tính và điện thoại phải cùng Wi-Fi; chạy `npm run dev:customer-api`, `npm run dev:web`, sau đó `npm run generate:qr` nếu IP máy tính thay đổi. Với môi trường nhà hàng thật nên dùng tên miền HTTPS hoặc IP tĩnh và đặt `NEXT_PUBLIC_WEB_URL` để không phải in lại QR. Nếu URL LAN vẫn không mở được từ thiết bị khác, kiểm tra tính năng AP/client isolation của router và cho phép TCP 3000 trong Windows Firewall ở profile Private. Phiên sửa tự động không tạo được rule Firewall vì Windows yêu cầu quyền Administrator.
+
+### Sửa máy khác pull repository nhưng trang QR tải mãi — 30/10/2026
+
+**Nguyên nhân:** QR được commit chứa IP LAN của máy đã tạo, repository lại thiếu `.env.example`; người mới dễ chỉ chạy web mà chưa chạy Customer API/MySQL. Các lệnh khởi tạo schema dùng hai file môi trường khác nhau và request của trang khách chưa có timeout, nên lỗi cấu hình có thể biểu hiện thành chờ rất lâu.
+
+**Đã xử lý:** thêm `.env.example`, cho setup staff database đọc `.env` làm phương án dự phòng, thêm `npm run setup:customer` để tạo schema staff + migration customer + QR, và thêm `npm run dev:customer` để tạo lại QR rồi chạy đồng thời API 4010 với web 3000. Lệnh chạy nhận biết dịch vụ đã mở và dùng lại thay vì lỗi trùng cổng. Request tải menu/gửi món có timeout 10 giây để hiện lỗi kết nối thay vì chờ vô hạn. Đã kiểm tra TypeScript, chạy lệnh mới từ trạng thái dừng, chạy lặp khi dịch vụ đang mở, và xác nhận trang A01 cùng API menu qua `192.168.2.50:3000` đều trả HTTP 200.
+
+**Máy mới sau khi pull:** chạy `Copy-Item .env.example .env`, điền tài khoản MySQL, `npm install`, `npm run setup:customer`, rồi `npm run dev:customer`. Phải quét ảnh QR vừa được tạo trên chính máy đó; không dùng QR của máy khác.
