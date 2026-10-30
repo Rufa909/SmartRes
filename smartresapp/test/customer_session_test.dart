@@ -25,6 +25,24 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(430, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       final client = MockClient((req) async {
+        if (req.url.path.endsWith('/details')) {
+          return http.Response(
+            jsonEncode({
+              'table': {
+                'id': 1,
+                'code': 'A01',
+                'area': 'Tầng 1',
+                'seats': 4,
+                'guests': 2,
+                'status': 'dining',
+              },
+              'items': [],
+              'subtotalAmount': 0,
+            }),
+            200,
+            headers: {'content-type': 'application/json; charset=utf-8'},
+          );
+        }
         expect(req.url.path, '/api/staff/snapshot');
         return http.Response(
           jsonEncode({

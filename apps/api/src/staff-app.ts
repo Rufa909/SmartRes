@@ -54,6 +54,22 @@ export function createStaffApp(db: Pool) {
       res.json({tables,menu:menu.map(m=>({...m,price:Number(m.price),available:Boolean(m.available)})),items});
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }));
+  app.get('/api/staff/tables/:id/details', requireRole('staff','manager'), route(async (req,res) => {
+    const c=await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables]=await c.query<RowDataPacket[]>('SELECT id,code,area,seats,guests,status FROM restaurant_tables WHERE id=? FOR UPDATE',[id.parse(req.params.id)]);
+      if (!tables.length) throw new ApiError(404,'Không tìm thấy bàn.');
+      const table=tables[0];
+      const [rows]=await c.query<RowDataPacket[]>(`SELECT i.id,i.item_name AS name,i.quantity,i.unit_price AS unitPrice,i.status,i.note,
+        o.order_code AS orderCode,o.created_at AS createdAt FROM order_items i JOIN orders o ON o.id=i.order_id
+        WHERE o.table_id=? AND o.payment_status='unpaid' AND o.status<>'cancelled' AND ? IN ('dining','waiting_payment')
+        ORDER BY o.id,i.id`,[table.id,table.status]);
+      const items=rows.map(i=>({...i,quantity:Number(i.quantity),unitPrice:Number(i.unitPrice),lineTotal:Number(i.quantity)*Number(i.unitPrice)}));
+      await c.commit();
+      res.set('Cache-Control','no-store').json({table,items,subtotalAmount:items.reduce((total,i)=>total+i.lineTotal,0)});
+    } catch(e) {await c.rollback();throw e;} finally {c.release();}
+  }));
   app.post('/api/staff/tables/:id/seat', requireRole('staff','manager'), route(async (req,res) => {
     const tableId=id.parse(req.params.id), guests=z.number().int().min(1).max(99).parse(req.body.guests);
     const c = await db.getConnection();

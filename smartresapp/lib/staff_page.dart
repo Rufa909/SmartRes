@@ -9,6 +9,7 @@ import 'order_catalogue.dart';
 import 'ready_alert.dart';
 import 'cashier_page.dart';
 import 'table_status.dart';
+import 'staff_table_details.dart';
 
 import 'package:flutter/services.dart';
 
@@ -484,62 +485,32 @@ class _StaffPageState extends State<StaffPage> {
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (sheetContext) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Bàn ${t['code']}',
-              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-            ),
-            Text('${tableStatus(t['status'] as String)} · ${t['area']}'),
-            const SizedBox(height: 18),
-            Text(
-              t['status'] == 'available'
-                  ? 'Bàn sẵn sàng đón khách.'
-                  : '${t['guests']} khách đang dùng bàn.',
-            ),
-            const SizedBox(height: 20),
-            if (t['status'] == 'available')
-              FilledButton.icon(
-                icon: const Icon(Icons.group_add),
-                label: const Text('Nhận bàn'),
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  seatTable(t);
-                },
-              ),
-            if (t['status'] == 'dining') ...[
-              FilledButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Gọi thêm món'),
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  chooseDish(t);
-                },
-              ),
-              OutlinedButton(
-                onPressed: () {
-                  Navigator.pop(sheetContext);
-                  mutate(
-                    () => api.payment(t['id'] as int),
-                    'Đã gửi yêu cầu thanh toán.',
-                  );
-                },
-                child: const Text('Yêu cầu thanh toán'),
-              ),
-            ],
-            if (t['status'] == 'waiting_payment')
-              const Text('Bàn đang chờ thu ngân thanh toán.'),
-          ],
+    builder: (sheetContext) => FractionallySizedBox(
+      heightFactor: .85,
+      child: SafeArea(
+        child: StaffTableDetails(
+          api: api,
+          table: t,
+          autoRefresh: widget.autoRefresh,
+          onSeat: (table) {
+            Navigator.pop(sheetContext);
+            seatTable(table);
+          },
+          onOrder: (table) {
+            Navigator.pop(sheetContext);
+            chooseDish(table);
+          },
+          onPayment: (table) {
+            Navigator.pop(sheetContext);
+            mutate(
+              () => api.payment(table['id'] as int),
+              'Đã gửi yêu cầu thanh toán.',
+            );
+          },
         ),
       ),
     ),
   );
-
   Future<void> seatTable(Map<String, dynamic> t) async {
     final guestController = TextEditingController(text: '1');
     int? selected;

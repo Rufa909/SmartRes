@@ -67,6 +67,17 @@ test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh to�
     const firstOrder=await order(token);
     assert.equal(firstOrder.status,201);
     const firstCode=(await firstOrder.json()).order.orderCode;
+    const otherToken=(await (await join('A02')).json()).token;
+    assert.equal((await order(otherToken,{...orderBody,tableCode:'A02'})).status,201);
+    const [cancelled]=await db.execute<import('mysql2/promise').ResultSetHeader>(`INSERT INTO orders(order_code,request_id,request_hash,table_id,total_amount,status)
+      VALUES('CANCELLED-DETAIL','cancelled-detail',REPEAT('0',64),1,10000,'cancelled')`);
+    await db.execute(`INSERT INTO order_items(order_id,menu_item_id,item_name,quantity,unit_price) VALUES(?,1,'Món đã hủy',1,10000)`,[cancelled.insertId]);
+    const tableDetail=await request(staff,'/api/staff/tables/1/details',undefined,userToken);
+    assert.equal(tableDetail.status,200);
+    const detail=await tableDetail.json();
+    assert.equal(detail.items.length,1); // Không lấy món bàn A02 hoặc đơn bị hủy.
+    assert.equal(detail.items[0].orderCode,firstCode);
+    assert.equal(detail.subtotalAmount,45000);
     // Hai khách quét cùng QR, mỗi điện thoại nhận token riêng của cùng lượt.
     const nextToken=(await (await join()).json()).token;
     assert.notEqual(nextToken,token);
@@ -97,7 +108,7 @@ test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh to�
     const race=await Promise.all([order(renewedToken),staffPost('tables/1/pay',{paymentMethod:'cash',confirmUnserved:true})]);
     assert.ok([201,400].includes(race[0].status));
     assert.equal(race[1].status,200);
-    const [unpaid]=await db.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM orders WHERE table_id=1 AND payment_status='unpaid'");
+    const [unpaid]=await db.query<RowDataPacket[]>("SELECT COUNT(*) AS total FROM orders WHERE table_id=1 AND payment_status='unpaid' AND status<>'cancelled'");
     assert.equal(Number(unpaid[0].total),0);
     const [tables]=await db.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=2');
     assert.equal(tables[0].status,'dining');

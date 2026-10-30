@@ -1,5 +1,16 @@
 # SmartRes — Hướng dẫn và nhật ký các chặng
 
+## Cập nhật 30/10/2026 — Xem món đã gọi trong chi tiết bàn nhân viên
+
+- Chạm bàn ở Sơ đồ bàn mở chi tiết có danh sách món, số phần, đơn giá, thành tiền, ghi chú, mã đơn và trạng thái từng món. Có tổng số phần và tạm tính món trước giảm giá.
+- Tải dữ liệu thật qua `GET /api/staff/tables/:id/details`, quyền nhân viên/quản lý. Chỉ lấy đơn chưa thanh toán, chưa hủy của đúng bàn đang dùng/chờ thanh toán; bàn trống không hiện món lượt cũ.
+- Chi tiết tự cập nhật 5 giây/lần, có tải lại, danh sách dài cuộn được. Bàn chưa gọi món hiển thị trống; lỗi có Thử lại và khóa thao tác, dữ liệu cũ có chú thích.
+- Giữ các thao tác nhận bàn, gọi thêm và yêu cầu thanh toán ngay trong chi tiết theo trạng thái mới nhất từ server. Không cần thay đổi schema/database.
+- Kiểm chứng: Flutter 31/31 bài đạt, gồm danh sách dài 25 món ở màn hình nhỏ và lỗi/thử lại; hai bài MySQL cho nhân viên/thu ngân và bảo mật đều đạt, có kiểm tra loại đơn đã thanh toán, đơn hủy và món bàn khác; backend TypeScript đạt.
+- Flutter analyzer không có vấn đề; APK debug nhân viên build thành công tại `smartresapp/build/app/outputs/flutter-apk/app-debug.apk`. Cần hot restart hoặc cập nhật APK để thấy chi tiết bàn mới; chưa cài APK lên máy ảo trong lượt này.
+
+Hướng dẫn: [Chi tiết bàn nhân viên](docs/chi-tiet-ban-nhan-vien.md).
+
 ## Điều chỉnh 30/10/2026 — Bỏ mã 6 số, chỉ quét QR
 
 Yêu cầu mới thay thế luồng nhập mã mô tả ở mục trước: **Wi-Fi nhà hàng → quét QR → vào thẳng thực đơn → chọn món → gửi đơn**. Đã bỏ màn hình nhập mã, nút cấp mã và API xem/cấp PIN. Phiên được web xin tự động theo bàn; backend chỉ cấp cho bàn đang phục vụ. Bàn chưa mở vẫn xem thực đơn được, chờ nhân viên nhận bàn rồi tự kết nối lại. Thanh toán vẫn thu hồi token và lượt khách mới không nhận token cũ.
