@@ -1,5 +1,44 @@
 # SmartRes — Hướng dẫn và nhật ký các chặng
 
+## Điều chỉnh 30/10/2026 — Bỏ mã 6 số, chỉ quét QR
+
+Yêu cầu mới thay thế luồng nhập mã mô tả ở mục trước: **Wi-Fi nhà hàng → quét QR → vào thẳng thực đơn → chọn món → gửi đơn**. Đã bỏ màn hình nhập mã, nút cấp mã và API xem/cấp PIN. Phiên được web xin tự động theo bàn; backend chỉ cấp cho bàn đang phục vụ. Bàn chưa mở vẫn xem thực đơn được, chờ nhân viên nhận bàn rồi tự kết nối lại. Thanh toán vẫn thu hồi token và lượt khách mới không nhận token cũ.
+
+Giới hạn mạng `CUSTOMER_ALLOWED_CIDRS`, kiểm tra socket IP thật và giới hạn tốc độ vẫn giữ nguyên. Không có PIN đồng nghĩa người đang trong mạng được phép và giữ ảnh QR vẫn có thể tham gia bàn đang mở. Không thể chứng minh đúng chỗ ngồi chỉ bằng QR cố định + Wi-Fi. Không mở port-forward/tunnel/VPN công khai để khách ngoài nhà hàng truy cập.
+
+Đã cập nhật hướng dẫn chi tiết và README theo luồng mới. Kiểm thử MySQL cho tự cấp phiên không PIN, sai bàn, hết hạn, thanh toán/lượt mới và hồi quy nhân viên/thu ngân đều đạt; TypeScript backend/web đạt; Flutter 29/29 bài đạt, analyzer không có vấn đề.
+
+Đã build lại APK nhân viên sau khi bỏ nút cấp mã. Đã làm mới tab A01 và quan sát thực đơn lấy 5 món từ API, không còn màn hình nhập mã; bàn chưa mở hiện thông báo nhờ nhân viên nhận bàn. Không tạo đơn mới trong DB thật ở lần xác nhận giao diện này.
+
+## Cập nhật 30/10/2026 — Chặng bảo vệ gọi món theo mạng và lượt bàn
+
+**Workflow:** Nhân viên nhận bàn → mở Mã gọi món cho khách → khách quét QR/nhập mã → backend cấp token đúng lượt bàn → đặt món → yêu cầu thanh toán → thu ngân chốt hóa đơn/thu hồi phiên.
+
+- Đã có bộ lọc mạng có thể chỉnh qua `CUSTOMER_ALLOWED_CIDRS` trong `.env.mysql.local`. Máy hiện được thêm cấu hình `192.168.1.0/24`; đổi sang `192.168.2.0/24` hoặc danh sách nhiều dải rồi khởi động lại `npm run dev:customer`. Kiểm tra socket IP thật cho HTTP/WebSocket, không tin header giả IP. Nếu để trống thì tự nhận subnet LAN hiện tại.
+- API khách chỉ nghe loopback, không công khai cổng 4010 cho thiết bị khác. Web qua server mới kiểm tra mạng; API sửa trạng thái, webhook thanh toán mẫu và socket bếp/quản lý không còn công khai trên Customer API.
+- Thêm bảng `dining_sessions`, `customer_session_tokens`, cột `orders.dining_session_id` bằng migration bổ sung. Nhận bàn sinh mã 6 số; token khách ngẫu nhiên được băm trước khi lưu. Không xóa dữ liệu đơn hiện có.
+- Nhân viên/quản lý xem hoặc cấp lại mã từ app Flutter. Cấp lại vô hiệu hóa các điện thoại cũ nhưng giữ đơn cùng lượt ăn. Mã/phiên tối đa 8 giờ; thanh toán thu hồi phiên trong cùng transaction và lượt ăn mới không nhận token cũ.
+- Web thêm màn hình nhập mã; token lưu theo bàn trong sessionStorage; kiểm tra định kỳ và kiểm tra ở từng lần gửi đơn/yêu cầu thanh toán. Backend chặn gọi món khi bàn chưa mở/chờ thanh toán, token sai/bàn khác/hết hạn hoặc đã thanh toán.
+- Chống đoán mã: sai 5 lần thì khóa 1 phút theo bàn; web giới hạn 20 lần thử/phút theo IP. Giới hạn 10 đơn/phút theo phiên, tối đa 99 phần/dòng.
+- Sửa phát sinh khi kiểm thử: mã hóa đơn có thể trùng nếu một bàn có hai lượt ăn trong cùng phút; bổ sung hậu tố ID đơn khi mã gốc đã dùng. Đồng thời sửa tràn tiêu đề app nhân viên trên màn hình điện thoại nhỏ.
+- Kiểm chứng: TypeScript backend/web đạt; 8/8 kiểm thử mạng/cấu hình đạt, gồm HTTP thật qua LAN bị chặn dù giả header IP; 2 bài tích hợp MySQL cho bảo mật và hồi quy nhân viên/thu ngân đều đạt, gồm gửi đơn đồng thời với thanh toán; Flutter 29/29 kiểm thử đạt; analyzer không có vấn đề; build APK debug nhân viên thành công.
+- Đã khởi động web/API mới, kiểm tra HTTP trang nhập mã, QR qua LAN và API menu đều 200. Đã quan sát giao diện xác nhận lượt bàn bằng trình duyệt. Máy ảo Android đang tắt (ADB không có thiết bị), nên chưa cài APK mới lên máy ảo trong lượt này.
+- Giới hạn: kiểm tra dải IP, không chứng minh SSID hay vị trí vật lý. Chưa thay đổi router/Windows Firewall hoặc kiểm tra trực tiếp điện thoại. Không mở port-forward/tunnel công khai; xem hướng dẫn tách subnet, HTTPS và cấu hình mạng trong tài liệu chi tiết.
+
+**Tài liệu đầy đủ:** [Bảo vệ gọi món và cấu hình mạng](docs/bao-ve-goi-mon-va-cau-hinh-mang.md), gồm các file đã sửa, cách đổi mạng, cách demo và lệnh kiểm thử.
+
+## Cập nhật 30/10/2026 — QR và cách chạy chung cho thành viên trong repo
+
+- Đồng bộ script tạo QR và migration khách với API: ưu tiên biến môi trường, rồi `.env.mysql.local`, rồi `.env`. Mỗi máy tự giữ tài khoản MySQL riêng; không commit các file cấu hình này.
+- Thêm `scripts/local-config.mjs` để tự chọn IPv4 LAN, ưu tiên Wi-Fi, bỏ qua địa chỉ tự gán `169.254.*`, Radmin VPN và adapter ảo. Có thể ghi đè bằng `NEXT_PUBLIC_WEB_URL` khi dùng mạng/domain khác.
+- Bỏ theo dõi bộ QR cũ trong Git và thêm `/apps/web/public/qr/` vào `.gitignore`. Các file hiện có vẫn nằm trên máy; thành viên chạy `npm run dev:customer` để tạo QR theo IP máy mình. Không commit QR có IP của một thành viên cho cả nhóm dùng.
+- Giữ lệnh chạy chung `npm run dev:customer`, cải thiện để luôn chạy từ thư mục gốc repo, in link xem/in QR, dùng đúng cổng API cấu hình và dừng cả cây tiến trình npm khi nhấn Ctrl+C trên Windows.
+- Proxy web sử dụng cổng `CUSTOMER_API_PORT` khi được cấu hình qua lệnh chạy chung.
+- README đã có hướng dẫn máy mới và sau khi pull: `npm install`, cấu hình MySQL một lần, `npm run setup:customer`, rồi `npm run dev:customer`. Máy cần có Node.js và MySQL; điện thoại cùng Wi-Fi và truy cập được TCP 3000.
+- Kiểm tra tự động: 3/3 bài kiểm tra chọn IP/ghi đè URL đạt; kiểm tra cú pháp script và `git diff --check` đạt. Lần thử tạo QR thực tế phát hiện máy hiện thiếu dependency `qrcode`; kết quả cài dependency và kiểm tra thực tế được ghi tiếp ở dưới.
+- Kiểm tra thực tế: cài dependency npm thành công; tạo được 8 mã QR trỏ về `http://192.168.1.15:3000`. Sandbox chặn MySQL với `EACCES`, chạy lại được cấp quyền thì thành công. Lệnh `npm run dev:customer` khởi động được web 3000 và API khách 4010; trang `/qr/index.html`, `/order/A01` và `/api/customer/menu` đều trả HTTP 200 trên máy tính. Giữ dịch vụ chạy để xem thử. Chưa kiểm tra trực tiếp từ điện thoại và chưa tạo đơn hàng mới trong lượt này.
+
+
 Cập nhật: **07/10/2026**. Tài liệu dành cho bạn bắt đầu từ chưa biết Flutter. Số chặng dưới đây được thống nhất theo các phần đã làm trong thư mục dự án.
 
 ## 1. Dự án hiện tại là gì?

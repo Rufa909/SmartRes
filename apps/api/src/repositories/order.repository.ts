@@ -2,6 +2,7 @@ import { db } from "../infrastructure/database.js";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
 import type { Pool } from 'mysql2/promise';
 import { createHash, randomUUID } from "node:crypto";
+import { CustomerAccessError, requireCustomerSession } from '../customer-sessions.js';
 
 export interface CreateOrderItemInput {
   menuItemId: number;
@@ -31,7 +32,7 @@ interface MenuItemRow extends RowDataPacket {
 export class OrderRepository {
   constructor(private readonly database: Pool = db) {}
 
-  async requestPayment(orderCode: string) {
+  async requestPayment(orderCode: string, token?: string) {
     const c = await this.database.getConnection();
     try {
       await c.beginTransaction();
@@ -39,7 +40,8 @@ export class OrderRepository {
       if (!order.length) throw new Error('Không tìm thấy đơn hàng.');
       const tableId = order[0].table_id;
       const [tables] = await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=? FOR UPDATE',[tableId]);
-      const [unpaid] = await c.query<RowDataPacket[]>(`SELECT id FROM orders WHERE order_code=? AND payment_status='unpaid' AND status<>'cancelled'`,[orderCode]);
+      const sessionId = await requireCustomerSession(c, Number(tableId), token, true);
+      const [unpaid] = await c.query<RowDataPacket[]>(`SELECT id FROM orders WHERE order_code=? AND dining_session_id=? AND payment_status='unpaid' AND status<>'cancelled'`,[orderCode,sessionId]);
       if (!unpaid.length || !['dining','waiting_payment'].includes(tables[0]?.status)) throw new Error('Đơn hàng không còn chờ thanh toán.');
       await c.execute("UPDATE restaurant_tables SET status='waiting_payment' WHERE id=?",[tableId]);
       await c.commit();
@@ -47,7 +49,7 @@ export class OrderRepository {
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }
 
-  async create(input: CreateOrderInput) {
+  async create(input: CreateOrderInput, token?: string) {
     const connection = await this.database.getConnection();
 
     try {
@@ -58,9 +60,13 @@ export class OrderRepository {
         [input.tableCode]
       );
       const table = tables[0];
-      if (!table || table.status === "disabled" || table.status === "waiting_payment") {
+      if (!table || table.status !== 'dining') {
         throw new Error("Bàn không hợp lệ hoặc đang tạm ngưng phục vụ.");
       }
+      const sessionId = await requireCustomerSession(connection, Number(table.id), token);
+      const [recent] = await connection.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM orders
+        WHERE dining_session_id=? AND created_at>DATE_SUB(NOW(), INTERVAL 1 MINUTE)`,[sessionId]);
+      if (Number(recent[0].total)>=10) throw new CustomerAccessError(429,'Bàn gửi quá nhiều đơn trong một phút. Vui lòng chờ rồi thử lại.');
 
       const lines: Array<CreateOrderItemInput & { name: string; unitPrice: number }> = [];
       let totalAmount = 0;
@@ -83,9 +89,9 @@ export class OrderRepository {
       const orderCode = `SR-${randomUUID()}`;
 
       const [orderResult] = await connection.execute<ResultSetHeader>(
-        `INSERT INTO orders (order_code, request_id, request_hash, table_id, total_amount, customer_note)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [orderCode, requestId, requestHash, table.id, totalAmount, input.customerNote ?? null]
+        `INSERT INTO orders (order_code, request_id, request_hash, table_id, total_amount, customer_note, dining_session_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [orderCode, requestId, requestHash, table.id, totalAmount, input.customerNote ?? null, sessionId]
       );
 
       for (const item of lines) {

@@ -22,8 +22,12 @@ export async function readInvoice(c: PoolConnection, tableId: number) {
     WHERE o.table_id=? AND o.payment_status='unpaid' AND o.status<>'cancelled' ORDER BY o.id,i.id`,[tableId]);
   const discount = await invoiceDiscount(c,Number(orders[0].id),orders.reduce((sum,o)=>sum+Number(o.totalAmount),0));
   const openedAt = tables[0].seatedAt ?? orders[0].createdAt;
+  const baseCode = invoiceCode(tables[0].code, new Date(openedAt));
+  const [existingCodes] = await c.query<RowDataPacket[]>('SELECT id FROM cashier_invoices WHERE invoice_code=? LIMIT 1',[baseCode]);
+  // Hai lượt bàn có thể thanh toán trong cùng phút; ID đơn đầu bảo đảm duy nhất.
+  const currentCode = existingCodes.length ? `${baseCode.slice(0,39)}-${orders[0].id}` : baseCode;
   return {
-    invoiceCode: invoiceCode(tables[0].code, new Date(openedAt)), tableId, tableCode: tables[0].code, guests: Number(tables[0].guests),
+    invoiceCode: currentCode, tableId, tableCode: tables[0].code, guests: Number(tables[0].guests),
     version: createHash('sha256').update(JSON.stringify({orders:orders.map(o=>[o.id,Number(o.totalAmount)]),items:items.map(i=>[i.id,i.name,Number(i.quantity),Number(i.unitPrice),i.note]),discount})).digest('hex'),
     openedAt, issuedAt: new Date().toISOString(), paidAt: null as string | null,
     paymentStatus: 'unpaid', paymentMethod: null as string | null,

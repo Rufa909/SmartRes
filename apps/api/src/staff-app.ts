@@ -7,6 +7,7 @@ import type { Pool, RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { createToken, readToken, verifyPassword, type Role, type AuthUser } from './auth.js';
 import { readInvoice } from './invoice.js';
 import { parseInvoiceSnapshot } from './invoice-storage.js';
+import { openDiningSession } from './customer-sessions.js';
 
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 const id = z.coerce.number().int().positive();
@@ -55,10 +56,16 @@ export function createStaffApp(db: Pool) {
   }));
   app.post('/api/staff/tables/:id/seat', requireRole('staff','manager'), route(async (req,res) => {
     const tableId=id.parse(req.params.id), guests=z.number().int().min(1).max(99).parse(req.body.guests);
-    const [result]=await db.execute<ResultSetHeader>(`UPDATE restaurant_tables SET status='dining',guests=?,seated_at=CURRENT_TIMESTAMP
-      WHERE id=? AND status='available'`, [guests,tableId]);
-    if (!result.affectedRows) throw new ApiError(409,'Bàn không còn trống hoặc không tồn tại.');
-    res.json({ok:true});
+    const c = await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [result]=await c.execute<ResultSetHeader>(`UPDATE restaurant_tables SET status='dining',guests=?,seated_at=CURRENT_TIMESTAMP
+        WHERE id=? AND status='available'`, [guests,tableId]);
+      if (!result.affectedRows) throw new ApiError(409,'Bàn không còn trống hoặc không tồn tại.');
+      const customerSession = await openDiningSession(c,tableId);
+      await c.commit();
+      res.json({ok:true,customerSession});
+    } catch(e) {await c.rollback();throw e;} finally {c.release();}
   }));
   app.post('/api/staff/tables/:id/request-payment', requireRole('staff','manager'), route(async (req,res) => {
     const tableId = id.parse(req.params.id);
@@ -234,6 +241,7 @@ export function createStaffApp(db: Pool) {
       const [saved] = await c.execute<ResultSetHeader>(`INSERT INTO cashier_invoices(invoice_code,table_id,table_code,total_amount,payment_method,paid_at,cashier_name,snapshot)
         VALUES(?,?,?,?,?,?,?,?)`,[invoice.invoiceCode,tableId,invoice.tableCode,invoice.totalAmount,method,paidRows[0].paid_at,receipt.cashierName,JSON.stringify(receipt)]);
       await c.execute(`UPDATE restaurant_tables SET status='available',guests=0,seated_at=NULL WHERE id=? AND status IN ('dining','waiting_payment')`,[tableId]);
+      await c.execute('UPDATE dining_sessions SET revoked_at=NOW() WHERE table_id=? AND revoked_at IS NULL',[tableId]);
       await c.commit();
       res.json({ok:true,tableId,paymentMethod:method,totalAmount:invoice.totalAmount,invoice:{...receipt,historyId:saved.insertId}});
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
@@ -262,6 +270,7 @@ export function createStaffApp(db: Pool) {
       }
       const code=`SR-${randomUUID()}`;
       const [order]=await c.execute<ResultSetHeader>('INSERT INTO orders(order_code,request_id,request_hash,table_id,total_amount) VALUES(?,?,?,?,?)', [code,input.requestId,hash,input.tableId,total]);
+      await c.execute(`UPDATE orders SET dining_session_id=(SELECT id FROM dining_sessions WHERE table_id=? AND revoked_at IS NULL AND expires_at>NOW() ORDER BY created_at DESC LIMIT 1) WHERE id=?`,[input.tableId,order.insertId]);
       for(const line of lines) await c.execute('INSERT INTO order_items(order_id,menu_item_id,item_name,quantity,unit_price) VALUES(?,?,?,?,?)',[order.insertId,line.menuItemId,line.name,line.quantity,line.price]);
       await c.commit(); res.status(201).json({orderCode:code,totalAmount:total});
     } catch(e) {await c.rollback(); throw e;} finally {c.release();}

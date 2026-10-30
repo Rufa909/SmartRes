@@ -4,11 +4,13 @@ import { PaymentController } from "./controllers/payment.controller.js";
 import { MenuRepository } from "./repositories/menu.repository.js";
 import { OrderRepository } from "./repositories/order.repository.js";
 import { OrderService } from "./services/order.service.js";
+import {db} from './infrastructure/database.js';
+import type {Pool} from 'mysql2/promise';
 import { PaymentService } from "./services/payment.service.js";
 
-export function createContainer() {
-  const menuRepository = new MenuRepository();
-  const orderRepository = new OrderRepository();
+export function createContainer(database: Pool = db) {
+  const menuRepository = new MenuRepository(database);
+  const orderRepository = new OrderRepository(database);
   const orderService = new OrderService(orderRepository);
   const paymentService = new PaymentService(orderRepository);
 

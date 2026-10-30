@@ -13,6 +13,7 @@ import {OrderController} from '../src/controllers/order.controller.js';
 import {OrderService} from '../src/services/order.service.js';
 import {createOrderRouter} from '../src/routes/order.routes.js';
 import {ensureInvoiceStorage} from '../src/invoice-storage.js';
+import {ensureCustomerSessions,joinDiningSession} from '../src/customer-sessions.js';
 dotenv.config({path:new URL('../../../.env.mysql.local',import.meta.url),quiet:true});
 dotenv.config({path:new URL('../../../.env',import.meta.url),quiet:true});
 
@@ -29,6 +30,7 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     // Existing installations predate per-dish notes.
     await db.query('ALTER TABLE order_items DROP COLUMN note');
     await ensureInvoiceStorage(db);
+    await ensureCustomerSessions(db);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['nhanvien','Nhân viên test','staff',hashPassword('Staff@123')]);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['bep','Bếp test','kitchen',hashPassword('Bep@12345')]);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['thungan','Thu ngân test','cashier',hashPassword('ThuNgan@123')]);
@@ -69,6 +71,7 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     assert.equal(emptyMap[0].area,'Test');
     assert.equal((await fetch(`${base}/snapshot`)).status,401);
     assert.equal((await post('tables/1/seat',{guests:5})).status,200);
+    const firstCustomer=await joinDiningSession(db,'TEST');
     // Giờ nhận bàn khác giờ gọi món, được giữ nguyên đến khi chốt bill.
     await db.query("UPDATE restaurant_tables SET seated_at='2026-10-28 10:15:30' WHERE id=1");
     const [seatedRows] = await db.query<RowDataPacket[]>('SELECT seated_at FROM restaurant_tables WHERE id=1');
@@ -106,7 +109,7 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     assert.equal(state.items.find((i:{id:number})=>i.id===itemId).status,'served');
     assert.equal((await post('tables/1/request-payment',{})).status,200);
     const customerOrders = new OrderRepository(db);
-    assert.deepEqual(await customerOrders.requestPayment(orders[0].orderCode),{ok:true});
+    assert.deepEqual(await customerOrders.requestPayment(orders[0].orderCode,firstCustomer.token),{ok:true});
     await assert.rejects(customerOrders.requestPayment('SR-khong-ton-tai'));
     await assert.rejects(customerOrders.create({tableCode:'TEST',items:[{menuItemId:1,quantity:1}]}));
     assert.equal((await post('orders',{...body,requestId:randomUUID()})).status,409);
@@ -156,8 +159,9 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     assert.equal(afterTable.tables[0].status,'available');
     // Một lượt khách mới yêu cầu trực tiếp từ trang gọi món.
     assert.equal((await post('tables/1/seat',{guests:2})).status,200);
-    const nextOrder = await customerOrders.create({tableCode:'TEST',items:[{menuItemId:2,quantity:1}]});
-    const customerPayment=(code:string)=>fetch(`${base.replace('/api/staff','')}/api/orders/${code}/request-payment`,{method:'POST'});
+    const secondCustomer=await joinDiningSession(db,'TEST');
+    const nextOrder = await customerOrders.create({tableCode:'TEST',items:[{menuItemId:2,quantity:1}]},secondCustomer.token);
+    const customerPayment=(code:string)=>fetch(`${base.replace('/api/staff','')}/api/orders/${code}/request-payment`,{method:'POST',headers:{Authorization:`Bearer ${secondCustomer.token}`}});
     assert.equal((await customerPayment('invalid-code')).status,400);
     assert.equal((await customerPayment(orders[0].orderCode)).status,400);
     assert.equal((await customerPayment(nextOrder.orderCode)).status,200);

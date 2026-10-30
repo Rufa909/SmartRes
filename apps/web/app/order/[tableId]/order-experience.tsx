@@ -17,6 +17,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { CustomerAccess } from './customer-access';
 
 type MenuItem = {
   id: number;
@@ -104,6 +105,11 @@ function QuantityControl({ value, onChange }: { value: number; onChange: (value:
 }
 
 export function OrderExperience({ tableId }: { tableId: string }) {
+  const tableCode=tableId.toUpperCase();
+  return <CustomerAccess key={tableCode} tableCode={tableCode}>{(token,expired)=><ActiveOrderExperience tableId={tableCode} token={token} onExpired={expired} />}</CustomerAccess>;
+}
+
+function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string; token: string; onExpired: () => void }) {
   const tableName = formatTable(tableId);
   const [category, setCategory] = useState<(typeof categories)[number]>("Tất cả");
   const [query, setQuery] = useState("");
@@ -129,8 +135,9 @@ export function OrderExperience({ tableId }: { tableId: string }) {
     setRequestingPayment(true);
     setPaymentError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/orders/${encodeURIComponent(orderCode)}/request-payment`, { method: "POST" });
+      const response = await fetchWithTimeout(`${apiBaseUrl}/orders/${encodeURIComponent(orderCode)}/request-payment`, { method: "POST", headers:{Authorization:`Bearer ${token}`} });
       const data = await response.json() as { message?: string };
+      if (response.status===401) {onExpired();return;}
       if (!response.ok) throw new Error(data.message || "Không gửi được yêu cầu thanh toán.");
       setPaymentRequested(true);
     } catch (error) {
@@ -206,12 +213,13 @@ export function OrderExperience({ tableId }: { tableId: string }) {
 
   async function placeOrder() {
     if (!cart.length || isOrdering) return;
+    if (!token) {setOrderError('Bàn chưa sẵn sàng gọi món. Vui lòng nhờ nhân viên nhận bàn và kiểm tra Wi-Fi nhà hàng.');return;}
     setIsOrdering(true);
     setOrderError(null);
     try {
       const response = await fetchWithTimeout(`${apiBaseUrl}/orders`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization:`Bearer ${token}` },
         body: JSON.stringify({
           tableCode: tableId.toUpperCase(),
           items: cart.map((item) => ({
@@ -223,6 +231,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
         })
       });
       const data = await response.json() as { order?: { orderCode?: string }; message?: string };
+      if (response.status===401) {onExpired();return;}
       if (!response.ok) throw new Error(data.message || "Không thể gửi đơn. Vui lòng thử lại.");
       setOrderCode(data.order?.orderCode ?? null);
       setOrderPlaced(true);
@@ -248,7 +257,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
           <div className="mt-9 rounded-3xl bg-slate-950 p-5 text-white">
             <p className="text-xs uppercase tracking-[0.18em] text-white/50">Bạn đang ngồi tại</p>
             <p className="mt-2 text-2xl font-black">{tableName}</p>
-            <div className="mt-4 flex items-center gap-2 text-xs text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />Phiên gọi món đang hoạt động</div>
+            <div className="mt-4 flex items-center gap-2 text-xs text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" />{token ? 'Sẵn sàng gọi món' : 'Đang xem thực đơn'}</div>
           </div>
 
           <nav className="mt-8 space-y-2">
@@ -272,13 +281,13 @@ export function OrderExperience({ tableId }: { tableId: string }) {
             <div className="mx-auto flex max-w-5xl items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="grid h-10 w-10 place-items-center rounded-full bg-coral text-white xl:hidden"><UtensilsCrossed size={18} /></div>
-                <div><p className="text-lg font-black tracking-tight sm:text-xl">Thực đơn nhà hàng</p><p className="text-xs text-slate-500 xl:hidden">{tableName} · Đang phục vụ</p></div>
+                <div><p className="text-lg font-black tracking-tight sm:text-xl">Thực đơn nhà hàng</p><p className="text-xs text-slate-500 xl:hidden">{tableName} · {token ? 'Đang phục vụ' : 'Xem thực đơn'}</p></div>
               </div>
               <button onClick={() => setCartOpen(true)} className="relative grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-700 xl:hidden" aria-label="Mở giỏ hàng">
                 <ShoppingBag size={20} />
                 {cartCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1 text-[10px] font-bold text-white">{cartCount}</span>}
               </button>
-              <div className="hidden items-center gap-3 xl:flex"><span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"><Clock3 size={15} /> Bếp đang nhận món</span></div>
+              <div className="hidden items-center gap-3 xl:flex"><span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700"><Clock3 size={15} /> {token ? 'Bếp đang nhận món' : 'Xem thực đơn'}</span></div>
             </div>
           </header>
 

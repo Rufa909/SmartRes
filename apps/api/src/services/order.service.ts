@@ -4,18 +4,18 @@ import { publishDomainEvent } from "../events/domain-events.js";
 export class OrderService {
   constructor(private readonly orderRepository: OrderRepository) {}
 
-  async createOrder(input: CreateOrderInput) {
+  async createOrder(input: CreateOrderInput, token?: string) {
     if (input.items.length === 0) {
       throw new Error("Order must contain at least one item.");
     }
 
-    const order = await this.orderRepository.create(input);
+    const order = await this.orderRepository.create(input, token);
     publishDomainEvent("order.created", order);
     return order;
   }
 
-  requestPayment(orderCode: string) {
-    return this.orderRepository.requestPayment(orderCode);
+  requestPayment(orderCode: string, token?: string) {
+    return this.orderRepository.requestPayment(orderCode, token);
   }
 
   async updateStatus(orderId: string, status: string) {

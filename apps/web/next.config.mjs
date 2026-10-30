@@ -5,7 +5,7 @@ const nextConfig = {
     return [
       {
         source: "/api/customer/:path*",
-        destination: "http://127.0.0.1:4010/api/:path*"
+        destination: `http://127.0.0.1:${process.env.CUSTOMER_API_PORT || 4010}/api/:path*`
       }
     ];
   }

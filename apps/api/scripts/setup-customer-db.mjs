@@ -1,7 +1,5 @@
 import mysql from 'mysql2/promise';
-import dotenv from 'dotenv';
-
-dotenv.config({ path: new URL('../../../.env', import.meta.url), quiet: true });
+import '../../../scripts/local-config.mjs';
 
 const database = process.env.MYSQL_DATABASE;
 if (!database) throw new Error('Thiếu MYSQL_DATABASE trong file .env.');
@@ -23,6 +21,12 @@ try {
 
   const [itemNotes] = await connection.query(`SHOW COLUMNS FROM order_items LIKE 'note'`);
   if (!itemNotes.length) await connection.query('ALTER TABLE order_items ADD COLUMN note TEXT NULL AFTER options_json');
+
+  const {readFile} = await import('node:fs/promises');
+  const sessionSchema=await readFile(new URL('../../../database/customer-sessions.sql',import.meta.url),'utf8');
+  for (const sql of sessionSchema.split(';').filter(s=>s.trim())) await connection.query(sql);
+  const [sessionsColumn]=await connection.query("SHOW COLUMNS FROM orders LIKE 'dining_session_id'");
+  if (!sessionsColumn.length) await connection.query('ALTER TABLE orders ADD COLUMN dining_session_id CHAR(36) NULL');
 
   console.log(`Customer ordering schema is ready in database ${database}.`);
 } finally {

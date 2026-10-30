@@ -1,5 +1,12 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
+import { fileURLToPath } from 'node:url';
+import { getWebUrl } from './local-config.mjs';
+import { networkPolicy } from './customer-network.mjs';
+
+const projectRoot = fileURLToPath(new URL('../', import.meta.url));
+const webUrl = getWebUrl();
+console.log(`Mạng được phép: ${networkPolicy().networks.join(', ') || 'chỉ máy này'}`);
 
 function npmCommand(args) {
   if (process.platform === 'win32') {
@@ -27,7 +34,7 @@ function isPortOpen(port) {
 
 const qrCommand = npmCommand(['run', 'generate:qr']);
 const qr = spawnSync(qrCommand.command, qrCommand.args, {
-  cwd: process.cwd(),
+  cwd: projectRoot,
   stdio: 'inherit'
 });
 
@@ -36,20 +43,25 @@ if (qr.status !== 0) {
   process.exit(qr.status ?? 1);
 }
 
+console.log(`\nKhi web báo Ready, mở QR của máy này: ${webUrl}/qr/index.html`);
+console.log('Điện thoại phải cùng Wi-Fi; cho phép Node.js qua Windows Firewall trên mạng Private nếu được hỏi.');
+
 const definitions = [
-  { name: 'Customer API', port: 4010, args: ['run', 'dev:customer-api'] },
+  { name: 'Customer API', port: Number(process.env.CUSTOMER_API_PORT || 4010), args: ['run', 'dev:customer-api'] },
   { name: 'Customer Web', port: 3000, args: ['run', 'dev:web'] }
 ];
 const services = [];
 
 for (const definition of definitions) {
   if (await isPortOpen(definition.port)) {
-    console.log(`${definition.name} đã chạy ở cổng ${definition.port}; dùng lại dịch vụ hiện có.`);
-    continue;
+    console.error(`Cổng ${definition.port} đang được sử dụng. Dừng dịch vụ cũ trước khi chạy để áp dụng đúng cấu hình mạng mới.`);
+    process.exit(1);
   }
+}
+for (const definition of definitions) {
   const command = npmCommand(definition.args);
   services.push(spawn(command.command, command.args, {
-    cwd: process.cwd(), stdio: 'inherit'
+    cwd: projectRoot, stdio: 'inherit'
   }));
 }
 
@@ -63,7 +75,10 @@ function stop(exitCode = 0) {
   if (stopping) return;
   stopping = true;
   for (const service of services) {
-    if (!service.killed) service.kill('SIGTERM');
+    if (process.platform === 'win32' && service.pid) {
+      // npm/cmd tạo tiến trình con; dừng cả cây do lệnh này khởi tạo.
+      spawnSync('taskkill', ['/pid', String(service.pid), '/t', '/f'], { stdio: 'ignore' });
+    } else if (!service.killed) service.kill('SIGTERM');
   }
   setTimeout(() => process.exit(exitCode), 250).unref();
 }

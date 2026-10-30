@@ -156,22 +156,31 @@ class _StaffPageState extends State<StaffPage> {
               child: Icon(Icons.badge_outlined, color: Colors.white),
             ),
             SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'SMARTRES',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.4,
-                    color: staffGreen,
-                  ),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SMARTRES',
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.4,
+                        color: staffGreen,
+                      ),
+                    ),
+                    Text(
+                      'Nhân viên',
+                      style: TextStyle(
+                        fontSize: 21,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Nhân viên',
-                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
-                ),
-              ],
+              ),
             ),
           ],
         ),

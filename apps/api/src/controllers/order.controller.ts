@@ -8,8 +8,8 @@ const createOrderSchema = z.object({
   items: z.array(
     z.object({
       menuItemId: z.coerce.number().int().positive(),
-      quantity: z.number().int().positive(),
-      options: z.array(z.unknown()).optional(),
+      quantity: z.number().int().min(1).max(99),
+      options: z.array(z.unknown()).max(10).optional(),
       note: z.string().trim().max(500).optional()
     })
   ).min(1).max(30)
@@ -24,7 +24,7 @@ export class OrderController {
 
   create = async (req: Request, res: Response) => {
     const input = createOrderSchema.parse(req.body);
-    const order = await this.orderService.createOrder(input);
+    const order = await this.orderService.createOrder(input, req.header('authorization')?.replace(/^Bearer /, ''));
     res.status(201).json({ order });
   };
 
@@ -37,6 +37,6 @@ export class OrderController {
 
   requestPayment = async (req: Request, res: Response) => {
     const orderCode = z.string().regex(/^SR-[0-9a-f-]{36}$/i).parse(req.params.orderCode);
-    res.json(await this.orderService.requestPayment(orderCode));
+    res.json(await this.orderService.requestPayment(orderCode, req.header('authorization')?.replace(/^Bearer /, '')));
   };
 }

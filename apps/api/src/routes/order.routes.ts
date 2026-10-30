@@ -5,7 +5,6 @@ export function createOrderRouter(controller: OrderController) {
   const router = Router();
   router.post("/", (req,res,next) => { void controller.create(req,res).catch(next); });
   router.post("/:orderCode/request-payment", (req,res,next) => { void controller.requestPayment(req,res).catch(next); });
-  router.patch("/:id/status", (req,res,next) => { void controller.updateStatus(req,res).catch(next); });
   return router;
 }
 
