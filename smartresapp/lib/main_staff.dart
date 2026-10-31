@@ -6,6 +6,7 @@ import 'cashier_page.dart';
 import 'login_page.dart';
 import 'staff_api.dart';
 import 'restaurant_theme.dart';
+import 'manager_page.dart';
 
 // Điểm khởi động riêng của app nhân viên trên điện thoại.
 void main() => runApp(const StaffApp());
@@ -23,19 +24,30 @@ class StaffApp extends StatelessWidget {
 
 class StaffAuthGate extends StatefulWidget {
   const StaffAuthGate({super.key});
-  @override State<StaffAuthGate> createState() => _StaffAuthGateState();
+  @override
+  State<StaffAuthGate> createState() => _StaffAuthGateState();
 }
 
 class _StaffAuthGateState extends State<StaffAuthGate> {
   final api = StaffApi();
   Map<String, dynamic>? user;
   @override
-  void dispose() { api.client.close(); super.dispose(); }
+  void dispose() {
+    api.client.close();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (user == null) return LoginPage(api: api, onLoggedIn: (value) async => setState(() => user = value));
+    if (user == null) {
+      return LoginPage(
+        api: api,
+        onLoggedIn: (value) async => setState(() => user = value),
+      );
+    }
     if (user!['role'] == 'kitchen') return KitchenPage(api: api);
     if (user!['role'] == 'cashier') return CashierPage(api: api);
+    if (user!['role'] == 'manager') return ManagerPage(api: api);
     return StaffPage(api: api);
   }
 }

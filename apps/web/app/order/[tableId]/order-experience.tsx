@@ -28,6 +28,7 @@ type MenuItem = {
   badge?: string;
   color: string;
   symbol: string;
+  imageUrl?: string | null;
 };
 
 type CartItem = {
@@ -40,18 +41,6 @@ type CartItem = {
   unitPrice: number;
 };
 
-const menuItems: MenuItem[] = [
-  { id: 101, name: "Phở bún mì canh", description: "Nước dùng hầm đậm vị, dùng kèm rau thơm và hành phi.", price: 59000, category: "Món nổi bật", badge: "Bán chạy", color: "#fff0eb", symbol: "🍜" },
-  { id: 102, name: "Gà nướng muối ớt", description: "Gà nướng da giòn, vị cay nhẹ, ăn cùng rau củ.", price: 69000, category: "Món chính", badge: "Bán chạy", color: "#fff3e4", symbol: "🍗" },
-  { id: 103, name: "Cơm rang cháy hành", description: "Cơm rang trứng, hành phi giòn và sốt nhà làm.", price: 55000, category: "Món chính", color: "#fff7da", symbol: "🍚" },
-  { id: 104, name: "Lẩu Alibaba", description: "Nước lẩu chua cay, hải sản và rau tươi cho 2 người.", price: 159000, category: "Món nổi bật", badge: "Món mới", color: "#ffece8", symbol: "🍲" },
-  { id: 105, name: "Chả giò hải sản", description: "Vỏ giòn, nhân hải sản, dùng kèm sốt chua ngọt.", price: 45000, category: "Khai vị", color: "#fff2dc", symbol: "🥟" },
-  { id: 106, name: "Salad rau mùa", description: "Rau xanh, cà chua bi và sốt mè rang thanh nhẹ.", price: 39000, category: "Khai vị", color: "#edf8e8", symbol: "🥗" },
-  { id: 107, name: "Trà đào cam sả", description: "Trà đào mát lạnh, cam vàng và sả thơm.", price: 39000, category: "Đồ uống", badge: "Yêu thích", color: "#fff0da", symbol: "🍹" },
-  { id: 108, name: "Cà phê sữa đá", description: "Cà phê rang đậm, sữa đặc và đá viên.", price: 32000, category: "Đồ uống", color: "#f3ebe6", symbol: "☕" }
-];
-
-const categories = ["Tất cả", "Khai vị", "Món chính", "Đồ uống"] as const;
 // Các món hiện chưa cấu hình phụ thu theo size/topping trong database.
 const sizePrices = { Nhỏ: 0, Vừa: 0, Lớn: 0 } as const;
 const extraPrices: Record<string, number> = {};
@@ -78,13 +67,15 @@ function formatTable(tableId: string) {
 }
 
 function FoodArtwork({ item, large = false }: { item: MenuItem; large?: boolean }) {
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>setFailed(false),[item.imageUrl]);
   return (
     <div
       className={`relative grid shrink-0 place-items-center overflow-hidden rounded-[22px] ${large ? "h-52 w-full sm:h-64" : "h-24 w-24"}`}
       style={{ background: item.color }}
       aria-hidden="true"
     >
-      <div className={`${large ? "text-8xl" : "text-5xl"} drop-shadow-sm`}>{item.symbol}</div>
+      {item.imageUrl && !failed ? <img src={item.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)} className="absolute inset-0 h-full w-full object-cover" /> : <div className={`${large ? "text-8xl" : "text-5xl"} drop-shadow-sm`}>{item.symbol}</div>}
       <span className="absolute bottom-3 right-3 h-3 w-3 rounded-full bg-emerald-500 ring-4 ring-white" />
     </div>
   );
@@ -111,7 +102,7 @@ export function OrderExperience({ tableId }: { tableId: string }) {
 
 function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string; token: string; onExpired: () => void }) {
   const tableName = formatTable(tableId);
-  const [category, setCategory] = useState<(typeof categories)[number]>("Tất cả");
+  const [category, setCategory] = useState<string>("Tất cả");
   const [query, setQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [selectedSize, setSelectedSize] = useState<"Nhỏ" | "Vừa" | "Lớn">("Vừa");
@@ -121,7 +112,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
-  const [liveMenuItems, setLiveMenuItems] = useState<MenuItem[]>(menuItems);
+  const [liveMenuItems, setLiveMenuItems] = useState<MenuItem[]>([]);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -149,10 +140,14 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
 
   useEffect(() => {
     let cancelled = false;
-    fetchWithTimeout(`${apiBaseUrl}/menu`)
+    let fetching=false;
+    function reloadMenu() {
+    if (fetching) return;
+    fetching=true;
+    void fetchWithTimeout(`${apiBaseUrl}/menu`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Không tải được thực đơn.");
-        const data = await response.json() as { items: Array<{ id: number; name: string; description: string | null; price: number | string; category: string; emoji?: string | null }> };
+        const data = await response.json() as { items: Array<{ id: number; name: string; description: string | null; price: number | string; category: string; emoji?: string | null; imageUrl?: string | null }> };
         if (!cancelled) {
           const colors = ["#fff0eb", "#fff7da", "#edf8e8", "#fff0da", "#f3ebe6", "#f0edff"];
           setLiveMenuItems(data.items.map((item, index) => ({
@@ -162,14 +157,30 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
             price: Number(item.price),
             category: item.category,
             color: colors[index % colors.length],
-            symbol: item.emoji || "🍽️"
+            symbol: item.emoji || "🍽️",
+            imageUrl:item.imageUrl,
           })));
+          setCategory(current=>current==='Tất cả' || data.items.some(i=>i.category===current)?current:'Tất cả');
           setMenuError(null);
         }
       })
-      .catch(() => { if (!cancelled) setMenuError("Chưa kết nối được máy chủ. Vui lòng thử lại sau."); });
-    return () => { cancelled = true; };
+      .catch(() => { if (!cancelled) setMenuError("Chưa kết nối được máy chủ. Vui lòng thử lại sau."); })
+      .finally(()=>{fetching=false;});
+    }
+    reloadMenu();
+    const timer=setInterval(reloadMenu,10000);
+    window.addEventListener('focus',reloadMenu);
+    return () => { cancelled = true;clearInterval(timer);window.removeEventListener('focus',reloadMenu); };
   }, []);
+
+  const categories=useMemo(()=>['Tất cả',...new Set(liveMenuItems.map(i=>i.category))],[liveMenuItems]);
+
+  useEffect(()=>{
+    setCart(current=>current.map(line=>{
+      const updated=liveMenuItems.find(item=>item.id===line.item.id);
+      return updated ? {...line,item:updated,unitPrice:updated.price+sizePrices[line.size]+line.extras.reduce((sum,extra)=>sum+extraPrices[extra],0)} : line;
+    }));
+  },[liveMenuItems]);
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase("vi");
@@ -214,6 +225,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
   async function placeOrder() {
     if (!cart.length || isOrdering) return;
     if (!token) {setOrderError('Bàn chưa sẵn sàng gọi món. Vui lòng nhờ nhân viên nhận bàn và kiểm tra Wi-Fi nhà hàng.');return;}
+    if (menuError || cart.some(line=>!liveMenuItems.some(item=>item.id===line.item.id))) {setOrderError('Thực đơn đã thay đổi hoặc có món hết bán. Vui lòng kiểm tra lại giỏ hàng và kết nối.');return;}
     setIsOrdering(true);
     setOrderError(null);
     try {

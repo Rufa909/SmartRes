@@ -1,5 +1,51 @@
 # SmartRes — Hướng dẫn và nhật ký các chặng
 
+## Chạy demo 31/10/2026 — Mở app Android
+
+- Đã bật máy ảo Medium_Phone. Lần đầu Android kẹt màn hình đen, chưa có dịch vụ package/activity; khởi động lại với `-no-snapshot -gpu swiftshader` thì hoàn tất khởi động. Không xóa dữ liệu máy ảo.
+- Đã cài thành công APK debug mới nhất bằng `adb install -r`, nối `adb reverse tcp:4000 tcp:4000` và mở `com.example.smartresapp/.MainActivity`.
+- API nhân viên 4000 và customer 4010 trả HTTP 200. Đã quan sát app hiển thị màn hình đăng nhập bình thường, không thấy lỗi Flutter/AndroidRuntime trong log kiểm tra. Người dùng đăng nhập tài khoản quản lý để xem dashboard; chưa thao tác dashboard trên máy ảo ở lượt mở này.
+
+## Kiểm thử lại 31/10/2026 — Sau dashboard quản lý
+
+- Đạt 52/52 bài tự động: Flutter 39, backend MySQL 5, mạng/cấu hình QR 8. TypeScript API/web, Flutter analyzer, build API, build web production và APK debug đều đạt.
+- Ban đầu ba máy chủ local đang tắt. Đã khởi động lại API nhân viên 4000, customer API 4010 và web 3000; kiểm tra HTTP đều 200. Đăng nhập thật cả bốn role thành công; báo cáo chỉ manager được 200, role khác 403 và không token 401.
+- Đối chiếu tháng 10: 697.000 đồng / 4 hóa đơn, tổng từng ngày khớp tổng kỳ; 224.000 đồng chưa thu được tách riêng. Không tạo đơn/hóa đơn vào DB thật; test tích hợp sử dụng DB tạm.
+- Chưa có thiết bị ADB nên chưa test thao tác trực tiếp trên máy ảo hay âm thanh loa. Đã giữ nguyên mã chức năng, dọn thay đổi từ các file sinh tự động của công cụ kiểm thử.
+- Chi tiết kết quả, câu lệnh chạy lại và giới hạn: [Báo cáo kiểm thử 31/10/2026](docs/bao-cao-kiem-thu-2026-10-31.md).
+
+## Chặng 31/10/2026 — Tổng quan và doanh thu quản lý
+
+- Thiết kế lại trang quản lý thành dashboard: thẻ doanh thu, số hóa đơn, trung bình hóa đơn, giảm giá, so sánh kỳ trước, biểu đồ, vận hành hiện tại, món bán chạy, phương thức thanh toán và hóa đơn gần đây. Giữ các lối vào thực đơn/bàn/bếp/thu ngân, thêm thanh điều hướng dưới.
+- Thêm `GET /api/staff/management/overview`, quyền manager ở backend. Chọn Hôm nay/7 ngày/Tháng này/khoảng tùy chọn, tối đa 366 ngày, giờ Việt Nam. Các truy vấn trong transaction đọc nhất quán; không cần migration mới.
+- Doanh thu chỉ cộng tiền sau giảm giá từ cashier_invoices theo thời điểm thanh toán. Không cộng tiền bàn chưa thanh toán hoặc nhân tiền hóa đơn theo dòng món. Top món đọc snapshot lịch sử; tiền món trước giảm giá và vận hành hiện tại được ghi nhãn riêng.
+- UI tự cập nhật 30 giây, hỗ trợ làm mới và xem hóa đơn. Khi đổi ngày, phản hồi chậm của khoảng cũ không ghi đè lên khoảng mới; lỗi không dùng số liệu giả. Đã sửa tràn tiêu đề và lớp Material cho danh sách hóa đơn trên màn hình nhỏ qua kiểm thử.
+- Đối chiếu API local: tháng 10 hiện 697.000 đồng từ 4 hóa đơn; 7 ngày gần nhất 25–31/10 có 0 hóa đơn. Không tạo hóa đơn/đơn giả để làm đầy báo cáo. Đã render ảnh xem trước bằng dữ liệu thật và kiểm tra bố cục, số liệu, biểu đồ.
+- Kiểm thử backend báo cáo đạt 2/2, gồm lọc ngày, ngày nhuận, giảm giá, không đếm trùng, tiền chưa thu, ngày trống, múi giờ MySQL UTC/UTC+7 và phân quyền. Các test hồi quy staff/menu/customer-security đều đạt. Kết quả kiểm thử Flutter/build cuối cùng cập nhật bên dưới.
+- Kiểm chứng cuối: Flutter 39/39 bài đạt, analyzer không có vấn đề; TypeScript backend/web và build API đạt; APK debug nhân viên có dashboard mới build thành công. ADB hiện không có thiết bị nên chưa cài bản này lên máy ảo. Đã bỏ helper chụp ảnh tạm khỏi mã nguồn, giữ ảnh kiểm tra dữ liệu thật ở thư mục artifact riêng ngoài repo.
+
+Hướng dẫn đọc số liệu, cách dùng và API: [Tổng quan và doanh thu quản lý](docs/tong-quan-va-doanh-thu-quan-ly.md).
+
+## Chặng 31/10/2026 — Quản lý thực đơn
+
+**Workflow:** Đăng nhập tài khoản quản lý → Quản lý thực đơn → thêm/sửa danh mục, thêm/sửa món/giá/mô tả/link ảnh → bật/tắt còn bán → menu khách/nhân viên dùng dữ liệu MySQL mới.
+
+- Đã có trang riêng cho role manager và màn hình thực đơn Flutter với tìm không dấu, lọc danh mục/còn bán/hết món, form có kiểm tra dữ liệu và giữ nội dung khi server lỗi. Ảnh hiện dùng URL http/https có xem trước, chưa upload ảnh từ máy.
+- Backend có 6 API quản lý, tất cả kiểm tra role manager; các role khác bị 403, không token bị 401. Dùng transaction/version để tránh ghi đè khi hai quản lý sửa cùng một món/danh mục. Ghi trước/sau vào bảng menu_audit.
+- Migration bổ sung image_url, version và audit, không xóa dữ liệu; đã áp dụng thành công lên smartres_staff. Menu web dùng danh mục động, tải lại mỗi 10 giây/khi quay lại tab, dùng ảnh và cập nhật giá giỏ chưa gửi. Món hết bán bị backend chặn ở cả luồng khách và nhân viên. Tên/giá của dòng đơn cũ giữ nguyên.
+- Quản lý có lối vào vận hành bàn, bếp và thu ngân. Đã sửa điều hướng bếp/thu ngân từ màn nhân viên để dùng cùng API/token đăng nhập, tránh mở màn hình mới bị mất quyền.
+- Kiểm chứng: backend/web TypeScript đạt; analyzer Flutter không có vấn đề; Flutter 35/35 bài đạt; các test MySQL menu, staff và customer-security đều đạt trong database tạm, gồm phân quyền, đồng thời, giá lịch sử và hết món.
+- Đã build APK debug nhân viên có màn quản lý mới. Máy ảo chưa bật nên chưa cài lên thiết bị trong lượt này. Đăng nhập manager thật trên API local và đọc 6 món/3 danh mục thành công; không sửa thực đơn hay tạo đơn vào DB thật khi kiểm tra.
+
+Hướng dẫn đầy đủ và API/file thay đổi: [Quản lý thực đơn](docs/quan-ly-thuc-don.md). Các chặng kế tiếp: quản lý bàn → báo cáo → quản lý tài khoản.
+
+## Kiểm tra 31/10/2026 — Chuông báo món mới cho bếp
+
+- Đã đối chiếu `KitchenPage.load()`: khi snapshot có ID món mới ở trạng thái `preparing` (Chờ bếp), gọi `ReadyAlert.play()`. Kiểm tra toàn bộ món trước khi lọc giao diện nên đang lọc bàn/trạng thái khác vẫn báo.
+- Bếp tải định kỳ 3 giây khi màn hình mở. Nhiều món mới trong cùng một lần tải phát một đợt báo; tải lại cùng dữ liệu hoặc chuyển sang đang nấu/hoàn thành không báo lặp. Mở lại màn hình có món chờ sẽ báo một lần.
+- Android `MainActivity.kt` đã nối MethodChannel và phát 3 tiếng bằng ToneGenerator, dùng mức âm lượng thông báo thiết bị. Bản web chưa có chuông native này, chưa có push/service nền đảm bảo báo khi đóng app hoặc khóa màn hình.
+- Chạy lại kiểm thử `Bếp báo món mới một lần, kể cả ngoài bộ lọc và thay món cùng số lượng`: đạt 1/1, bao gồm mất mạng/kết nối lại. Đây là kiểm thử gọi kênh âm thanh bằng mock; chưa nghe/xác nhận loa máy ảo hay điện thoại thực tế trong lượt này. Không tạo đơn mới vào DB thật và không thay đổi logic chuông.
+
 ## Cập nhật 30/10/2026 — Xem món đã gọi trong chi tiết bàn nhân viên
 
 - Chạm bàn ở Sơ đồ bàn mở chi tiết có danh sách món, số phần, đơn giá, thành tiền, ghi chú, mã đơn và trạng thái từng món. Có tổng số phần và tạm tính món trước giảm giá.

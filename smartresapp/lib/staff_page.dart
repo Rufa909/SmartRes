@@ -191,7 +191,7 @@ class _StaffPageState extends State<StaffPage> {
             onPressed: () async {
               await Navigator.push<void>(
                 context,
-                MaterialPageRoute(builder: (_) => const CashierPage()),
+                MaterialPageRoute(builder: (_) => CashierPage(api: api)),
               );
               if (mounted) await refresh();
             },
@@ -202,7 +202,7 @@ class _StaffPageState extends State<StaffPage> {
             onPressed: () async {
               await Navigator.push<void>(
                 context,
-                MaterialPageRoute(builder: (_) => const KitchenPage()),
+                MaterialPageRoute(builder: (_) => KitchenPage(api: api)),
               );
               if (mounted) await refresh();
             },

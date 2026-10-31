@@ -209,12 +209,24 @@ class _OrderCatalogueState extends State<OrderCatalogue> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  // Figma uses this same placeholder in every menu card; replace with real menu images when the API provides them.
-                                  Image.asset(
-                                    'assets/figma/imgFoodImageFrame.png',
-                                    height: 110,
-                                    fit: BoxFit.cover,
-                                  ),
+                                  if (m['imageUrl'] is String &&
+                                      (m['imageUrl'] as String).isNotEmpty)
+                                    Image.network(
+                                      m['imageUrl'] as String,
+                                      height: 110,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => Image.asset(
+                                        'assets/figma/imgFoodImageFrame.png',
+                                        height: 110,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  else
+                                    Image.asset(
+                                      'assets/figma/imgFoodImageFrame.png',
+                                      height: 110,
+                                      fit: BoxFit.cover,
+                                    ),
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(
                                       12,

@@ -1,5 +1,18 @@
 # SmartRes
 
+## Tổng quan và doanh thu
+
+Tài khoản quản lý đã có dashboard doanh thu thực thu từ hóa đơn đã thanh toán,
+lọc khoảng ngày theo giờ Việt Nam, biểu đồ, món bán chạy, phương thức thanh toán
+và trạng thái vận hành hiện tại. Xem [hướng dẫn tổng quan/doanh thu](docs/tong-quan-va-doanh-thu-quan-ly.md).
+
+## Quản lý thực đơn
+
+App Flutter đã có màn hình riêng cho tài khoản `manager`: thêm/sửa món, giá, mô tả,
+link ảnh, danh mục và còn bán/hết món. API kiểm tra quyền và lưu dữ liệu vào MySQL.
+Xem [hướng dẫn quản lý thực đơn](docs/quan-ly-thuc-don.md) để cập nhật database/APK
+và dùng tài khoản quản lý. Các phần quản lý bàn và tài khoản sẽ làm tiếp.
+
 ## Bảo vệ QR và chọn mạng Wi-Fi được phép
 
 Khách kết nối Wi-Fi và **quét QR để vào thẳng thực đơn, không nhập mã 6 số**.

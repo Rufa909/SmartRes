@@ -18,6 +18,7 @@ class StaffApi {
   final http.Client client;
   final String baseUrl;
   String? token;
+  Map<String, dynamic>? user;
   StaffApi({http.Client? client, String? baseUrl})
     : client = client ?? http.Client(),
       baseUrl = baseUrl ?? defaultBaseUrl;
@@ -37,6 +38,7 @@ class StaffApi {
         );
       }
       token = data['token'] as String;
+      user = data['user'] as Map<String, dynamic>;
       return data;
     } on StaffApiError {
       rethrow;
@@ -84,6 +86,32 @@ class StaffApi {
   }
 
   Future<Map<String, dynamic>> snapshot() => request('snapshot');
+  Future<Map<String, dynamic>> managedMenu() => request('management/menu');
+  Future<Map<String, dynamic>> managementOverview(
+    String from,
+    String to,
+  ) => request(
+    'management/overview?from=${Uri.encodeQueryComponent(from)}&to=${Uri.encodeQueryComponent(to)}',
+  );
+  Future<Map<String, dynamic>> saveMenuItem(
+    Map<String, dynamic> body, {
+    int? id,
+  }) => request(id == null ? 'management/menu' : 'management/menu/$id', body);
+  Future<Map<String, dynamic>> setMenuAvailability(
+    int id,
+    int version,
+    bool available,
+  ) => request('management/menu/$id/availability', {
+    'version': version,
+    'available': available,
+  });
+  Future<Map<String, dynamic>> saveMenuCategory(
+    Map<String, dynamic> body, {
+    int? id,
+  }) => request(
+    id == null ? 'management/categories' : 'management/categories/$id',
+    body,
+  );
   Future<Map<String, dynamic>> tableDetails(int tableId) =>
       request('tables/$tableId/details');
   Future<Map<String, dynamic>> cashier() => request('cashier');

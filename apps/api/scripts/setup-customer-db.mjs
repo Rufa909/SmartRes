@@ -23,6 +23,10 @@ try {
   if (!itemNotes.length) await connection.query('ALTER TABLE order_items ADD COLUMN note TEXT NULL AFTER options_json');
 
   const {readFile} = await import('node:fs/promises');
+  const menuSchema=await readFile(new URL('../../../database/menu-management.sql',import.meta.url),'utf8');
+  for(const sql of menuSchema.split(';').filter(s=>s.trim())) {
+    await connection.query(sql).catch(e=>{if(e.code!=='ER_DUP_FIELDNAME')throw e;});
+  }
   const sessionSchema=await readFile(new URL('../../../database/customer-sessions.sql',import.meta.url),'utf8');
   for (const sql of sessionSchema.split(';').filter(s=>s.trim())) await connection.query(sql);
   const [sessionsColumn]=await connection.query("SHOW COLUMNS FROM orders LIKE 'dining_session_id'");

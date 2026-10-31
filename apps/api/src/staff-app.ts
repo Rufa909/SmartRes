@@ -8,6 +8,8 @@ import { createToken, readToken, verifyPassword, type Role, type AuthUser } from
 import { readInvoice } from './invoice.js';
 import { parseInvoiceSnapshot } from './invoice-storage.js';
 import { openDiningSession } from './customer-sessions.js';
+import {MenuError,menuInput,updateMenuInput,categoryInput,updateCategoryInput,availabilityInput,readManagedMenu,saveMenuItem,saveCategory,setMenuAvailability} from './menu-management.js';
+import {readManagementOverview} from './management-overview.js';
 
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 const id = z.coerce.number().int().positive();
@@ -39,12 +41,33 @@ export function createStaffApp(db: Pool) {
     const user = {id:Number(rows[0].id),username:rows[0].username,displayName:rows[0].displayName,role:rows[0].role as Role};
     res.json({token:createToken(user),user});
   }));
+  app.get('/api/staff/management/menu',requireRole('manager'),route(async (_req,res)=>{
+    res.set('Cache-Control','no-store').json(await readManagedMenu(db));
+  }));
+  app.get('/api/staff/management/overview',requireRole('manager'),route(async (req,res)=>{
+    res.set('Cache-Control','no-store').json(await readManagementOverview(db,req.query));
+  }));
+  app.post('/api/staff/management/menu',requireRole('manager'),route(async (req,res)=>{
+    res.status(201).json(await saveMenuItem(db,currentUser(req),menuInput.parse(req.body)));
+  }));
+  app.post('/api/staff/management/menu/:id',requireRole('manager'),route(async (req,res)=>{
+    res.json(await saveMenuItem(db,currentUser(req),updateMenuInput.parse(req.body),id.parse(req.params.id)));
+  }));
+  app.post('/api/staff/management/menu/:id/availability',requireRole('manager'),route(async (req,res)=>{
+    res.json(await setMenuAvailability(db,currentUser(req),id.parse(req.params.id),availabilityInput.parse(req.body)));
+  }));
+  app.post('/api/staff/management/categories',requireRole('manager'),route(async (req,res)=>{
+    res.status(201).json(await saveCategory(db,currentUser(req),categoryInput.parse(req.body)));
+  }));
+  app.post('/api/staff/management/categories/:id',requireRole('manager'),route(async (req,res)=>{
+    res.json(await saveCategory(db,currentUser(req),updateCategoryInput.parse(req.body),id.parse(req.params.id)));
+  }));
   app.get('/api/staff/snapshot', requireRole('staff','kitchen','manager'), route(async (_req,res) => {
     const c = await db.getConnection();
     try {
       await c.beginTransaction();
       const [tables] = await c.query<RowDataPacket[]>('SELECT id,code,area,seats,guests,status FROM restaurant_tables WHERE status <> "disabled" ORDER BY code');
-      const [menu] = await c.query<RowDataPacket[]>(`SELECT m.id,m.name,m.emoji,m.price,m.is_available AS available,c.name AS category
+      const [menu] = await c.query<RowDataPacket[]>(`SELECT m.id,m.name,m.description,m.emoji,m.image_url AS imageUrl,m.price,m.is_available AS available,c.name AS category
         FROM menu_items m JOIN categories c ON c.id=m.category_id ORDER BY c.sort_order,m.id`);
       const [items] = await c.query<RowDataPacket[]>(`SELECT i.id,t.code AS tableCode,i.item_name AS name,i.quantity,i.status,
         i.unit_price AS unitPrice,i.note,o.order_code AS orderCode,o.created_at AS createdAt
@@ -317,7 +340,7 @@ export function createStaffApp(db: Pool) {
   }));
   app.use((_req,res)=>res.status(404).json({message:'Không tìm thấy API.'}));
   app.use((error: unknown,_req: express.Request,res: express.Response,_next: express.NextFunction) => {
-    if(error instanceof ApiError) { res.status(error.status).json({message:error.message}); return; }
+    if(error instanceof ApiError || error instanceof MenuError) { res.status(error.status).json({message:error.message}); return; }
     if(error instanceof ZodError || error instanceof SyntaxError) {res.status(400).json({message:'Dữ liệu gửi lên không hợp lệ.'});return;}
     console.error('Staff API failed:', (error as {code?:string}).code ?? 'UNKNOWN');
     res.status(503).json({message:'Không thể lưu hoặc tải dữ liệu MySQL. Vui lòng thử lại.'});
