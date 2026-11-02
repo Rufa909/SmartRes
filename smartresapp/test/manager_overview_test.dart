@@ -23,6 +23,38 @@ Widget page(http.Client client) => MaterialApp(
 );
 
 void main() {
+  testWidgets('Truy cập nhanh mở Giảm giá và khuyến mãi', (tester) async {
+    var promotionLoads = 0;
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/promotions')) {
+        promotionLoads++;
+        return response({'promotions': []});
+      }
+      return response(overviewFixture());
+    });
+    addTearDown(client.close);
+    await tester.pumpWidget(page(client));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Giảm giá và khuyến mãi'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('Giảm giá và khuyến mãi'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Giảm giá và khuyến mãi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Khuyến mãi'), findsOneWidget);
+    expect(find.text('Giảm giá'), findsOneWidget);
+    expect(find.text('Các đơn đã áp dụng'), findsOneWidget);
+    expect(find.text('Thêm chương trình'), findsNothing);
+    expect(promotionLoads, 0);
+    await tester.tap(find.text('Khuyến mãi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Thêm chương trình'), findsOneWidget);
+    expect(promotionLoads, 1);
+  });
+
   testWidgets('Truy cập nhanh mở Thời gian và trạng thái ra món', (
     tester,
   ) async {

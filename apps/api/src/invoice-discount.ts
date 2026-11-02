@@ -1,6 +1,26 @@
 import type { PoolConnection, RowDataPacket } from 'mysql2/promise';
+import {readPromotion,evaluatePromotion} from './promotions.js';
+import {findDiscountCode,validateDiscountCode} from './discount-codes.js';
 
 export async function invoiceDiscount(c: PoolConnection, firstOrderId: number, subtotal: number) {
+  const [codes]=await c.query<RowDataPacket[]>('SELECT discount_id AS discountId FROM invoice_discount_codes WHERE first_order_id=?',[firstOrderId]);
+  if(codes.length){
+    const discount=await findDiscountCode(c,Number(codes[0].discountId));
+    const result=validateDiscountCode(discount,subtotal);
+    return {subtotalAmount:subtotal,discountMode:'discount_code',discountPercentage:discount?.discountType==='percentage'?discount.discountPercent??0:0,
+      voucherCode:null,discountAmount:result.discountAmount,totalAmount:subtotal-result.discountAmount,discountError:result.reason,
+      discountCodeId:Number(codes[0].discountId),discountCode:discount?.discountCode??null,discountName:discount?.discountName??null,discountCodeVersion:discount?.version??null,
+      discountType:discount?.discountType??null,discountValue:discount?.discountType==='percentage'?discount.discountPercent:discount?.fixedAmount,maxDiscountAmount:discount?.maxDiscountAmount??null};
+  }
+  const [selections]=await c.query<RowDataPacket[]>('SELECT promotion_id AS promotionId FROM invoice_promotions WHERE first_order_id=?',[firstOrderId]);
+  if(selections.length) {
+    const promotion=await readPromotion(c,Number(selections[0].promotionId));
+    const result=promotion?evaluatePromotion({subtotalAmount:subtotal,paymentStatus:'unpaid'},promotion):{applicable:false,reason:'Chương trình không tồn tại.',discountAmount:0};
+    return {subtotalAmount:subtotal,discountMode:'promotion',discountPercentage:promotion?.discountType==='percentage'?promotion.discountValue:0,
+      voucherCode:null,discountAmount:result.discountAmount,totalAmount:subtotal-result.discountAmount,discountError:result.reason,
+      promotionId:Number(selections[0].promotionId),promotionName:promotion?.name??null,promotionVersion:promotion?.version??null,
+      discountType:promotion?.discountType??null,discountValue:promotion?.discountValue??0,maxDiscountAmount:promotion?.maxDiscountAmount??null};
+  }
   const [settings] = await c.query<RowDataPacket[]>('SELECT mode,percentage,voucher_code AS voucherCode FROM invoice_discounts WHERE first_order_id=?',[firstOrderId]);
   const selected = settings[0];
   let percentage = selected ? Number(selected.percentage) : 0;

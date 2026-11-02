@@ -34,9 +34,42 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
   final percentage = TextEditingController();
   final voucher = TextEditingController();
   String discountMode = 'manual';
+  int? selectedPromotionId;
+  String? selectedPromotionName;
   bool discountDirty = false;
   bool discountExpanded = false;
   String? discountInputError;
+  Map<String, dynamic>? foundDiscount;
+
+  Future<void> searchCode() async {
+    if (busy) return;
+    if (voucher.text.trim().isEmpty) {
+      setState(() => discountInputError = 'Vui lòng nhập mã giảm giá.');
+      return;
+    }
+    setState(() {
+      busy = true;
+      foundDiscount = null;
+      discountInputError = null;
+    });
+    try {
+      final result = await widget.api.searchDiscountCode(
+        widget.tableId,
+        voucher.text.trim(),
+      );
+      if (mounted) {
+        setState(() => foundDiscount = result);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => discountInputError = e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => busy = false);
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -69,16 +102,93 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
   }
 
   void syncDiscount(Map<String, dynamic> bill) {
-    discountMode = bill['discountMode'] == 'voucher' ? 'voucher' : 'manual';
+    foundDiscount = null;
+    discountMode = bill['discountMode'] == 'voucher'
+        ? 'discount_code'
+        : ['promotion', 'discount_code'].contains(bill['discountMode'])
+        ? bill['discountMode'] as String
+        : 'manual';
+    selectedPromotionId = bill['promotionId'] as int?;
+    selectedPromotionName = bill['promotionName'] as String?;
     final value = (bill['discountPercentage'] as num?) ?? 0;
     percentage.text = value == 0 ? '' : value.toString();
-    voucher.text = bill['voucherCode'] as String? ?? '';
+    voucher.text =
+        bill['discountCode'] as String? ?? bill['voucherCode'] as String? ?? '';
     discountDirty = false;
     discountInputError = null;
   }
 
+  Future<void> choosePromotion() async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      discountInputError = null;
+    });
+    try {
+      final promotions = await widget.api.invoicePromotions(widget.tableId);
+      if (!mounted) return;
+      if (promotions.isEmpty) {
+        setState(
+          () => discountInputError =
+              'Chưa có chương trình đủ điều kiện cho hóa đơn vào lúc này.',
+        );
+        return;
+      }
+      final picked = await showDialog<Map<String, dynamic>>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Chọn khuyến mãi'),
+          content: SizedBox(
+            width: 340,
+            height: 300,
+            child: ListView(
+              children: [
+                for (final promotion in promotions)
+                  ListTile(
+                    title: Text(promotion['name'] as String),
+                    subtitle: Text(
+                      'Giảm ${invoiceMoney(promotion['discountAmount'] as num)}',
+                    ),
+                    onTap: () => Navigator.pop(dialogContext, promotion),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Hủy'),
+            ),
+          ],
+        ),
+      );
+      if (mounted && picked != null) {
+        setState(() {
+          discountMode = 'promotion';
+          selectedPromotionId = picked['id'] as int;
+          selectedPromotionName = picked['name'] as String;
+          discountDirty = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => discountInputError = e.toString());
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> applyDiscount({bool clear = false}) async {
     if (busy) return;
+    if (!clear &&
+        discountMode == 'discount_code' &&
+        (foundDiscount == null ||
+            foundDiscount!['discountCode'] !=
+                voucher.text.trim().toUpperCase())) {
+      setState(
+        () => discountInputError = 'Tìm kiếm mã hợp lệ trước khi áp dụng.',
+      );
+      return;
+    }
     final value = num.tryParse(percentage.text.trim().replaceAll(',', '.'));
     if (!clear &&
         discountMode == 'manual' &&
@@ -93,8 +203,8 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
       );
       return;
     }
-    if (!clear && discountMode == 'voucher' && voucher.text.trim().isEmpty) {
-      setState(() => discountInputError = 'Vui lòng nhập mã voucher.');
+    if (!clear && discountMode == 'promotion' && selectedPromotionId == null) {
+      setState(() => discountInputError = 'Chọn chương trình khuyến mãi.');
       return;
     }
     setState(() {
@@ -105,9 +215,14 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
       final updated = await widget.api.applyDiscount(
         widget.tableId,
         invoice!['version'] as String,
-        clear ? 'none' : discountMode,
+        clear
+            ? 'none'
+            : discountMode == 'discount_code'
+            ? (foundDiscount!['kind'] as String? ?? 'discount_code')
+            : discountMode,
         percentage: value,
         code: voucher.text.trim(),
+        promotionId: selectedPromotionId,
       );
       if (!mounted) return;
       setState(() {
@@ -315,19 +430,33 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
           const Text('Giảm giá', style: TextStyle(fontWeight: FontWeight.bold)),
           if (!paid) ...[
             const SizedBox(height: 8),
-            SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'manual', label: Text('Nhập %')),
-                ButtonSegment(value: 'voucher', label: Text('Mã voucher')),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final entry in {
+                  'manual': 'Nhập %',
+                  'discount_code': 'Mã giảm giá',
+                  'promotion': 'Khuyến mãi',
+                }.entries)
+                  ChoiceChip(
+                    label: Text(entry.value),
+                    selected: discountMode == entry.key,
+                    onSelected: busy
+                        ? null
+                        : (_) {
+                            if (entry.key == 'promotion') {
+                              choosePromotion();
+                            } else {
+                              setState(() {
+                                discountMode = entry.key;
+                                discountDirty = true;
+                                discountInputError = null;
+                              });
+                            }
+                          },
+                  ),
               ],
-              selected: {discountMode},
-              onSelectionChanged: busy
-                  ? null
-                  : (value) => setState(() {
-                      discountMode = value.first;
-                      discountDirty = true;
-                      discountInputError = null;
-                    }),
             ),
             const SizedBox(height: 12),
             if (discountMode == 'manual')
@@ -345,15 +474,64 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
                 ),
                 onChanged: (_) => setState(() => discountDirty = true),
               )
+            else if (discountMode == 'discount_code')
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: voucher,
+                    enabled: !busy,
+                    maxLength: 64,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'Nhập mã giảm giá',
+                    ),
+                    onChanged: (_) => setState(() {
+                      foundDiscount = null;
+                      discountDirty = true;
+                      discountInputError = null;
+                    }),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : searchCode,
+                    icon: const Icon(Icons.search),
+                    label: const Text('Tìm kiếm'),
+                  ),
+                  if (foundDiscount != null)
+                    Card(
+                      color: const Color(0xFFEAF6EE),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              foundDiscount!['discountName'] as String,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text('Mã: ${foundDiscount!['discountCode']}'),
+                            Text(
+                              'Mức giảm: ${foundDiscount!['discountType'] == 'percentage' ? '${foundDiscount!['discountPercent']}%' : invoiceMoney(foundDiscount!['fixedAmount'] as num)}',
+                            ),
+                            Text(
+                              'Tiền giảm: ${invoiceMoney(foundDiscount!['discountAmount'] as num)}',
+                            ),
+                            Text(
+                              'Số lượt còn lại: ${foundDiscount!['remainingQuantity'] ?? 'Không giới hạn'}',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              )
             else
-              TextField(
-                key: const Key('voucher-code'),
-                controller: voucher,
-                enabled: !busy,
-                maxLength: 40,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(labelText: 'Nhập mã voucher'),
-                onChanged: (_) => setState(() => discountDirty = true),
+              OutlinedButton.icon(
+                onPressed: busy ? null : choosePromotion,
+                icon: const Icon(Icons.local_offer_outlined),
+                label: Text(selectedPromotionName ?? 'Chọn chương trình'),
               ),
             if (discountInputError != null)
               Text(
@@ -399,7 +577,11 @@ class _InvoiceDialogState extends State<InvoiceDialog> {
             'Tiền món: ${invoiceMoney((bill['subtotalAmount'] as num?) ?? bill['totalAmount'] as num)}',
           ),
           Text(
-            'Giảm giá${savedMode == 'voucher'
+            'Giảm giá${savedMode == 'promotion'
+                ? ' (${bill['promotionName']})'
+                : savedMode == 'discount_code'
+                ? ' (${bill['discountName']} · ${bill['discountCode']})'
+                : savedMode == 'voucher'
                 ? ' (${bill['voucherCode']})'
                 : percent > 0
                 ? ' ($percent%)'

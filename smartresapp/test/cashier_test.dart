@@ -58,6 +58,74 @@ http.Response jsonResponse(Object body, [int status = 200]) => http.Response(
 );
 
 void main() {
+  testWidgets('Thu ngân chọn khuyến mãi đủ điều kiện và bỏ giảm giá', (
+    tester,
+  ) async {
+    var current = invoice();
+    var applies = 0;
+    final client = MockClient((req) async {
+      if (req.url.path.endsWith('/promotions')) {
+        return jsonResponse({
+          'promotions': [
+            {'id': 3, 'name': 'Giờ trưa', 'discountAmount': 15000},
+          ],
+        });
+      }
+      if (req.method == 'POST') {
+        final body = jsonDecode(req.body) as Map<String, dynamic>;
+        applies++;
+        expect(body['version'], current['version']);
+        if (body['mode'] == 'promotion') {
+          expect(body['promotionId'], 3);
+          current = {
+            ...current,
+            'discountMode': 'promotion',
+            'promotionId': 3,
+            'promotionName': 'Giờ trưa',
+            'discountPercentage': 0,
+            'discountAmount': 15000,
+            'subtotalAmount': 115000,
+            'totalAmount': 100000,
+          };
+        } else {
+          expect(body['mode'], 'none');
+          current = invoice();
+        }
+      }
+      return jsonResponse({'invoice': current});
+    });
+    addTearDown(client.close);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: InvoiceDialog(
+          api: StaffApi(client: client),
+          tableId: 2,
+          onPaid: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('toggle-discount')));
+    await tester.tap(find.byKey(const Key('toggle-discount')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Khuyến mãi'));
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Khuyến mãi'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chọn khuyến mãi'), findsOneWidget);
+    await tester.tap(find.text('Giờ trưa'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Áp dụng'));
+    await tester.tap(find.text('Áp dụng'));
+    await tester.pumpAndSettle();
+    expect(find.text('Giảm giá (Giờ trưa): −15.000 đ'), findsOneWidget);
+    expect(find.text('Cần thanh toán: 100.000 đ'), findsOneWidget);
+    await tester.ensureVisible(find.text('Bỏ giảm giá'));
+    await tester.tap(find.text('Bỏ giảm giá'));
+    await tester.pumpAndSettle();
+    expect(applies, 2);
+    expect(find.text('Cần thanh toán: 115.000 đ'), findsOneWidget);
+  });
+
   testWidgets('Xác nhận lấy món mới nhất và bỏ món đã phục vụ khỏi danh sách', (
     tester,
   ) async {
@@ -277,7 +345,7 @@ void main() {
   });
 
   testWidgets(
-    'Giảm giá dưới phương thức thanh toán: nhập %, voucher và bỏ giảm',
+    'Giảm giá dưới phương thức thanh toán: nhập %, tra cứu mã và bỏ giảm',
     (tester) async {
       var current = {
         ...invoice(),
@@ -288,6 +356,23 @@ void main() {
       };
       var requests = 0;
       final client = MockClient((req) async {
+        if (req.url.path.endsWith('/discount-code/search')) {
+          final code = jsonDecode(req.body)['discountCode'];
+          if (code == 'SAI') {
+            return jsonResponse({'message': 'Mã giảm giá không hợp lệ'}, 409);
+          }
+          return jsonResponse({
+            'discount': {
+              'kind': 'voucher',
+              'discountCode': code,
+              'discountName': 'Giảm 20%',
+              'discountType': 'percentage',
+              'discountPercent': 20,
+              'discountAmount': 23000,
+              'remainingQuantity': null,
+            },
+          });
+        }
         if (req.method != 'POST') {
           return jsonResponse({'invoice': current});
         }
@@ -339,16 +424,30 @@ void main() {
       await tester.tap(find.text('Áp dụng'));
       await tester.pumpAndSettle();
       expect(find.text('Cần thanh toán: 103.500 đ'), findsOneWidget);
-      await tester.ensureVisible(find.text('Mã voucher'));
-      await tester.tap(find.text('Mã voucher'));
+      expect(find.text('Mã voucher'), findsNothing);
+      await tester.ensureVisible(find.text('Mã giảm giá'));
+      await tester.tap(find.text('Mã giảm giá'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byKey(const Key('voucher-code')), 'SAI');
-      await tester.ensureVisible(find.text('Áp dụng'));
-      await tester.tap(find.text('Áp dụng'));
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nhập mã giảm giá'),
+        'SAI',
+      );
+      await tester.ensureVisible(find.text('Tìm kiếm'));
+      await tester.tap(find.text('Tìm kiếm'));
       await tester.pumpAndSettle();
-      expect(find.text('Voucher không hợp lệ'), findsOneWidget);
+      expect(find.text('Mã giảm giá không hợp lệ'), findsOneWidget);
       expect(find.text('Cần thanh toán: 103.500 đ'), findsOneWidget);
-      await tester.enterText(find.byKey(const Key('voucher-code')), 'TEST20');
+      await tester.ensureVisible(
+        find.widgetWithText(TextField, 'Nhập mã giảm giá'),
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nhập mã giảm giá'),
+        'TEST20',
+      );
+      await tester.ensureVisible(find.text('Tìm kiếm'));
+      await tester.tap(find.text('Tìm kiếm'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Áp dụng'));
       await tester.tap(find.text('Áp dụng'));
       await tester.pumpAndSettle();
       expect(find.text('Cần thanh toán: 92.000 đ'), findsOneWidget);

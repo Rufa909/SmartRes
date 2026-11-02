@@ -6,7 +6,12 @@ import 'staff_api.dart';
 
 class CashierHistoryPage extends StatefulWidget {
   final StaffApi api;
-  const CashierHistoryPage({super.key, required this.api});
+  final bool discountedOnly;
+  const CashierHistoryPage({
+    super.key,
+    required this.api,
+    this.discountedOnly = false,
+  });
   @override
   State<CashierHistoryPage> createState() => _CashierHistoryPageState();
 }
@@ -39,6 +44,7 @@ class _CashierHistoryPageState extends State<CashierHistoryPage> {
       final data = await widget.api.invoiceHistory(
         query: search.text.trim(),
         offset: pageOffset,
+        discountedOnly: widget.discountedOnly,
       );
       if (!mounted) return;
       setState(() {
@@ -84,7 +90,9 @@ class _CashierHistoryPageState extends State<CashierHistoryPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Lịch sử thanh toán'),
+      title: Text(
+        widget.discountedOnly ? 'Các đơn đã áp dụng' : 'Lịch sử thanh toán',
+      ),
       actions: [
         IconButton(
           tooltip: 'Tải lại lịch sử',
@@ -95,6 +103,13 @@ class _CashierHistoryPageState extends State<CashierHistoryPage> {
     ),
     body: Column(
       children: [
+        if (widget.discountedOnly)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Text(
+              'Hóa đơn đã thanh toán có giảm giá, voucher hoặc khuyến mãi.',
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: TextField(
@@ -147,7 +162,13 @@ class _CashierHistoryPageState extends State<CashierHistoryPage> {
                             '${receipt['invoiceCode']} • Bàn ${receipt['tableCode']}',
                           ),
                           subtitle: Text(
-                            '${invoiceDate(receipt['paidAt'])}\n${paymentMethods[receipt['paymentMethod']] ?? 'Không ghi nhận'} • ${invoiceMoney(receipt['totalAmount'] as num)}',
+                            '${invoiceDate(receipt['paidAt'])}\n${paymentMethods[receipt['paymentMethod']] ?? 'Không ghi nhận'} • ${invoiceMoney(receipt['totalAmount'] as num)}${widget.discountedOnly ? '\nĐã giảm: ${invoiceMoney((receipt['discountAmount'] as num?) ?? 0)}${receipt['promotionName'] != null
+                                      ? ' · ${receipt['promotionName']}'
+                                      : receipt['discountCode'] != null
+                                      ? ' · ${receipt['discountCode']}'
+                                      : receipt['voucherCode'] != null
+                                      ? ' · ${receipt['voucherCode']}'
+                                      : ''}' : ''}',
                           ),
                           trailing: opening == receipt['historyId']
                               ? const SizedBox(

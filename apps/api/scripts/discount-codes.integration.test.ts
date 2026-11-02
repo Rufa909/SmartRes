@@ -1,0 +1,107 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+import {readFile} from 'node:fs/promises';
+import {randomBytes} from 'node:crypto';
+import {once} from 'node:events';
+import {createStaffApp} from '../src/staff-app.js';
+import {createToken,hashPassword,type Role} from '../src/auth.js';
+import {ensureInvoiceStorage} from '../src/invoice-storage.js';
+import {ensureCustomerSessions} from '../src/customer-sessions.js';
+import {discountCodeInput,generateDiscountCode,validateDiscountCode,type DiscountCodeInput,type DiscountCode} from '../src/discount-codes.js';
+dotenv.config({path:new URL('../../../.env.mysql.local',import.meta.url),quiet:true});
+dotenv.config({path:new URL('../../../.env',import.meta.url),quiet:true});
+const input=():DiscountCodeInput=>({discountName:'Tri Ân Khách Hàng',totalQuantity:100,codeMode:'auto',discountType:'percentage',discountPercent:20,fixedAmount:null,maxDiscountAmount:30000,minOrderValue:100000,isActive:true,isAlwaysActive:true,allDay:true,startTime:null,endTime:null,weekdays:[1,2,3,4,5,6,7],startDate:null,endDate:null});
+const record=():DiscountCode=>({...input(),id:1,discountCode:'TAKH10020',usedQuantity:0,remainingQuantity:100,version:1});
+test('Sinh mã tiếng Việt và validate thời gian, số lượt, giá trị, hạn mức',()=>{
+  assert.equal(generateDiscountCode('Tri Ân Khách Hàng',100,20),'TAKH10020');
+  assert.equal(generateDiscountCode('  Đãi   Khách Đầu Năm! ',50,10000),'DKDN5010000');
+  assert.equal(generateDiscountCode('Ưu Đãi',10,12.5),'UD10125');
+  assert.equal(validateDiscountCode(record(),200000).discountAmount,30000);
+  assert.match(validateDiscountCode(null,200000).reason!,/không tồn tại/);
+  assert.match(validateDiscountCode({...record(),isActive:false,usedQuantity:100},1).reason!,/bị khóa/);
+  assert.match(validateDiscountCode({...record(),usedQuantity:100},1).reason!,/hết lượt/);
+  assert.match(validateDiscountCode(record(),99999).reason!,/tối thiểu/);
+  const schedule={...record(),isAlwaysActive:false,allDay:false,startTime:'14:00',endTime:'17:00',weekdays:[1],startDate:'2026-11-02',endDate:'2026-11-02'};
+  assert.equal(validateDiscountCode(schedule,200000,new Date('2026-11-02T07:00:00Z')).applicable,true);
+  assert.equal(validateDiscountCode(schedule,200000,new Date('2026-11-02T10:00:00Z')).applicable,false);
+  assert.match(validateDiscountCode({...schedule,allDay:true},200000,new Date('2026-11-03T07:00:00Z')).reason!,/hết hạn/);
+  assert.equal(validateDiscountCode({...record(),discountType:'fixed',fixedAmount:500000,maxDiscountAmount:null},200000).discountAmount,200000);
+  for(const bad of [{...input(),totalQuantity:0},{...input(),usedQuantity:0},{...input(),discountPercent:101},{...input(),codeMode:'manual'},{...input(),codeMode:'manual',discountCode:'CÓ DẤU'},{...input(),isAlwaysActive:false,startDate:'2026-02-30',endDate:'2026-02-30'}])assert.equal(discountCodeInput.safeParse(bad).success,false);
+});
+test('MySQL/API: phân quyền, CRUD, tra cứu, áp dụng, thanh toán đồng thời lượt cuối và lịch sử',async()=>{
+  const config={host:process.env.MYSQL_HOST,port:Number(process.env.MYSQL_PORT||3306),user:process.env.MYSQL_USER,password:process.env.MYSQL_PASSWORD};
+  const admin=await mysql.createConnection(config);
+  const name=`smartres_codes_test_${randomBytes(6).toString('hex')}`;
+  await admin.query(`CREATE DATABASE \`${name}\` CHARACTER SET utf8mb4`);
+  const db=mysql.createPool({...config,database:name,connectionLimit:8});
+  let server:ReturnType<ReturnType<typeof createStaffApp>['listen']>|undefined;
+  try{
+    const schema=await readFile(new URL('../../../database/staff-schema.sql',import.meta.url),'utf8');
+    for(const sql of schema.split(';').filter(s=>s.trim()))await db.query(sql);
+    await ensureInvoiceStorage(db);await ensureInvoiceStorage(db);await ensureCustomerSessions(db);
+    const roles:Role[]=['manager','cashier','staff','kitchen'];
+    for(const [i,role] of roles.entries())await db.execute('INSERT INTO users(id,username,display_name,role,password_hash) VALUES(?,?,?,?,?)',[i+1,role,role,role,hashPassword('Test@123')]);
+    await db.query("INSERT INTO categories(id,name) VALUES(1,'Test')");
+    await db.query("INSERT INTO menu_items(id,category_id,name,price) VALUES(1,1,'Cơm',100000)");
+    for(let i=1;i<=3;i++){
+      await db.execute("INSERT INTO restaurant_tables(id,code,name,area,status,guests) VALUES(?,?,?,'Test','waiting_payment',2)",[i,`D${i}`,`D${i}`]);
+      await db.execute("INSERT INTO orders(id,order_code,request_id,request_hash,table_id,total_amount) VALUES(?,?,?,REPEAT('a',64),?,200000)",[i,`CODE-${i}`,`REQ-${i}`,i]);
+      await db.execute("INSERT INTO order_items(order_id,menu_item_id,item_name,quantity,unit_price,status) VALUES(?,1,'Cơm',2,100000,'served')",[i]);
+    }
+    server=createStaffApp(db).listen(0,'127.0.0.1');await once(server,'listening');
+    const root=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+    const tokens=Object.fromEntries(roles.map((role,i)=>[role,createToken({id:i+1,username:role,displayName:role,role})]));
+    const req=(path:string,role?:Role,body?:unknown)=>fetch(root+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(role?{Authorization:`Bearer ${tokens[role]}`}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+    const list='/api/v1/manager/discounts';
+    assert.equal((await req(list)).status,401);
+    for(const role of ['cashier','staff','kitchen'] as Role[])assert.equal((await req(list,role,input())).status,403);
+    const created=await req(list,'manager',input());assert.equal(created.status,201);
+    let d=(await created.json()).discount;assert.equal(d.discountCode,'TAKH10020');assert.equal(d.usedQuantity,0);
+    assert.equal((await req(list,'manager',input())).status,409);
+    assert.equal((await req(list,'manager',{...input(),usedQuantity:4})).status,400);
+    const search=(code:string,tableId=1)=>req('/api/v1/cashier/discounts/search','cashier',{tableId,discountCode:code,orderTotalAmount:9999999});
+    const valid=await search('takh10020');assert.equal(valid.status,200);
+    assert.equal((await valid.json()).discount.discountAmount,30000);
+    const missing=await search('MISSING');assert.equal(missing.status,409);assert.match((await missing.json()).message,/không tồn tại/);
+    assert.equal((await req(`${list}/${d.id}/status`,'manager',{version:d.version,isActive:false})).status,200);
+    assert.match((await (await search(d.discountCode)).json()).message,/bị khóa/);
+    assert.equal((await req(`${list}/${d.id}/status`,'manager',{version:d.version,isActive:true})).status,409);
+    let edit=await req(`${list}/${d.id}`,'manager',{...input(),minOrderValue:300000,version:2});assert.equal(edit.status,200);d=(await edit.json()).discount;
+    assert.match((await (await search(d.discountCode)).json()).message,/tối thiểu/);
+    edit=await req(`${list}/${d.id}`,'manager',{...input(),version:d.version,totalQuantity:1});assert.equal(edit.status,200);d=(await edit.json()).discount;
+    assert.equal(d.discountCode,'TAKH120');
+    const bill=async(tableId:number)=>(await (await req(`/api/staff/tables/${tableId}/invoice`,'cashier')).json()).invoice;
+    const apply=async(tableId:number)=>{const b=await bill(tableId);const r=await req(`/api/staff/tables/${tableId}/discount`,'cashier',{mode:'discount_code',code:d.discountCode,version:b.version});assert.equal(r.status,200);return (await r.json()).invoice;};
+    const bills=await Promise.all([apply(1),apply(2)]);
+    assert.equal(bills[0].totalAmount,170000);
+    assert.equal((await (await req(list,'manager')).json()).discounts[0].usedQuantity,0);
+    // Both devices have applied the same final use. Only one payment may redeem it.
+    const payments=await Promise.all(bills.map((b,i)=>req('/api/v1/orders/pay','cashier',{tableId:i+1,paymentMethod:'cash',version:b.version})));
+    assert.deepEqual(payments.map(r=>r.status).sort(),[200,409]);
+    const winner=payments[0].status===200?1:2;
+    const receipt=(await payments[winner-1].json()).invoice;
+    assert.equal(receipt.discountCode,'TAKH120');assert.equal(receipt.discountAmount,30000);
+    assert.equal((await (await req(list,'manager')).json()).discounts[0].usedQuantity,1);
+    const [counts]=await db.query<mysql.RowDataPacket[]>('SELECT COUNT(*) AS n FROM discount_redemptions');assert.equal(Number(counts[0].n),1);
+    assert.equal((await req('/api/v1/orders/pay','cashier',{tableId:winner,paymentMethod:'cash'})).status,409);
+    assert.match((await (await search(d.discountCode,3)).json()).message,/hết lượt/);
+    const saved=(await (await req(`/api/staff/cashier/history/${receipt.historyId}`,'cashier')).json()).invoice;
+    assert.equal(saved.discountCode,'TAKH120');assert.equal(saved.totalAmount,170000);
+    assert.equal((await req(`${list}/${d.id}`,'manager',{...input(),totalQuantity:0,version:d.version})).status,400);
+    // A failed payment must not consume a use.
+    const fixed=await req(list,'manager',{...input(),codeMode:'manual',discountCode:'FIXED',discountType:'fixed',fixedAmount:15000,discountPercent:null,totalQuantity:2});assert.equal(fixed.status,201);
+    let third=await bill(3);
+    const applied=await req('/api/staff/tables/3/discount','cashier',{mode:'discount_code',code:'FIXED',version:third.version});assert.equal(applied.status,200);third=(await applied.json()).invoice;
+    assert.equal(third.totalAmount,185000);
+    await db.query('CREATE TRIGGER reject_test_receipt BEFORE INSERT ON cashier_invoices FOR EACH ROW SIGNAL SQLSTATE \'45000\' SET MESSAGE_TEXT=\'test rollback\'');
+    assert.equal((await req('/api/v1/orders/pay','cashier',{tableId:3,paymentMethod:'cash',version:third.version})).status,503);
+    const [counter]=await db.query<mysql.RowDataPacket[]>("SELECT used_quantity FROM discount_codes WHERE discount_code='FIXED'");assert.equal(Number(counter[0].used_quantity),0);
+    await db.query('DROP TRIGGER reject_test_receipt');
+    assert.equal((await req('/api/v1/orders/pay','cashier',{tableId:3,paymentMethod:'cash',version:third.version})).status,200);
+  }finally{
+    if(server)await new Promise<void>((resolve,reject)=>server!.close(e=>e?reject(e):resolve()));
+    await db.end();await admin.query(`DROP DATABASE \`${name}\``);await admin.end();
+  }
+});

@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { Pool, RowDataPacket } from 'mysql2/promise';
+import {ensurePromotionStorage} from './promotions.js';
+import {ensureDiscountCodeStorage} from './discount-codes.js';
 
 export function parseInvoiceSnapshot(value: unknown): Record<string, unknown> {
   return typeof value === 'string' ? JSON.parse(value) : value as Record<string, unknown>;
@@ -21,6 +23,8 @@ export async function ensureInvoiceStorage(db: Pool) {
   }
   const schema = await readFile(new URL('../../../database/cashier-schema.sql', import.meta.url), 'utf8');
   for (const statement of schema.split(';').filter(s=>s.trim())) await db.query(statement);
+  await ensurePromotionStorage(db);
+  await ensureDiscountCodeStorage(db);
   // Restore receipts paid before persistent invoice history was introduced.
   const [groups] = await db.query<RowDataPacket[]>(`SELECT bill.* FROM (SELECT MIN(o.id) AS firstId,o.table_id AS tableId,t.code AS tableCode,
     o.paid_at AS paidAt,o.payment_method AS paymentMethod,SUM(o.total_amount) AS totalAmount

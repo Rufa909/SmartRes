@@ -13,6 +13,7 @@ import 'invoice_dialog.dart';
 import 'restaurant_theme.dart';
 import 'personnel_management_page.dart';
 import 'item_timing_page.dart';
+import 'discount_promotion_hub.dart';
 
 String _money(num value) =>
     '${value.round().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ';
@@ -414,6 +415,21 @@ class _ManagerPageState extends State<ManagerPage> {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: shortcut(
+                    'Giảm giá và khuyến mãi',
+                    Icons.local_offer_outlined,
+                    brandOrange,
+                    () => open(DiscountPromotionHub(api: widget.api)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(child: SizedBox()),
+              ],
             ),
             if (operations != null) ...[
               const SizedBox(height: 18),

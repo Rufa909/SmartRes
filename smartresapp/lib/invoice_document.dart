@@ -122,7 +122,11 @@ Future<({Uint8List bytes, PdfPageFormat format})> _buildReceipt(
                 children: [
                   pw.Expanded(
                     child: pw.Text(
-                      'Giảm giá (${invoice['discountPercentage']}%)',
+                      invoice['discountMode'] == 'promotion'
+                          ? 'Khuyến mãi: ${invoice['promotionName']}'
+                          : invoice['discountMode'] == 'discount_code'
+                          ? 'Giảm giá: ${invoice['discountName']} (${invoice['discountCode']})'
+                          : 'Giảm giá (${invoice['discountPercentage']}%)',
                     ),
                   ),
                   pw.Text('-${invoiceMoney(invoice['discountAmount'] as num)}'),

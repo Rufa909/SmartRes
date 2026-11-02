@@ -88,6 +88,26 @@ class StaffApi {
   Future<Map<String, dynamic>> snapshot() => request('snapshot');
   Future<Map<String, dynamic>> managedMenu() => request('management/menu');
   Future<Map<String, dynamic>> managedUsers() => request('management/users');
+  Future<Map<String, dynamic>> managedPromotions() =>
+      request('management/promotions');
+  Future<Map<String, dynamic>> savePromotion(
+    Map<String, dynamic> body, {
+    int? id,
+  }) => request(
+    id == null ? 'management/promotions' : 'management/promotions/$id',
+    body,
+  );
+  Future<Map<String, dynamic>> togglePromotion(
+    int id,
+    int version,
+    bool isActive,
+  ) => request('management/promotions/$id/status', {
+    'version': version,
+    'isActive': isActive,
+  });
+  Future<List<Map<String, dynamic>>> invoicePromotions(int tableId) async =>
+      ((await request('tables/$tableId/promotions'))['promotions'] as List)
+          .cast<Map<String, dynamic>>();
   Future<Map<String, dynamic>> itemTimings({
     String status = '',
     String query = '',
@@ -137,6 +157,31 @@ class StaffApi {
   );
   Future<Map<String, dynamic>> tableDetails(int tableId) =>
       request('tables/$tableId/details');
+  Future<Map<String, dynamic>> managedDiscountCodes() =>
+      request('management/discounts');
+  Future<Map<String, dynamic>> saveDiscountCode(
+    Map<String, dynamic> body, {
+    int? id,
+  }) => request(
+    id == null ? 'management/discounts' : 'management/discounts/$id',
+    body,
+  );
+  Future<Map<String, dynamic>> toggleDiscountCode(
+    int id,
+    int version,
+    bool active,
+  ) => request('management/discounts/$id/status', {
+    'version': version,
+    'isActive': active,
+  });
+  Future<Map<String, dynamic>> searchDiscountCode(
+    int tableId,
+    String code,
+  ) async =>
+      (await request('tables/$tableId/discount-code/search', {
+            'discountCode': code,
+          }))['discount']
+          as Map<String, dynamic>;
   Future<Map<String, dynamic>> cashier() => request('cashier');
   Future<Map<String, dynamic>> cashierTables() => request('cashier/tables');
   Future<List<Map<String, dynamic>>> cashierMenu() async =>
@@ -157,8 +202,9 @@ class StaffApi {
   Future<Map<String, dynamic>> invoiceHistory({
     String query = '',
     int offset = 0,
+    bool discountedOnly = false,
   }) => request(
-    'cashier/history?q=${Uri.encodeQueryComponent(query)}&offset=$offset',
+    'cashier/history?q=${Uri.encodeQueryComponent(query)}&offset=$offset${discountedOnly ? '&discounted=true' : ''}',
   );
   Future<Map<String, dynamic>> savedInvoice(int id) async =>
       (await request('cashier/history/$id'))['invoice'] as Map<String, dynamic>;
@@ -171,12 +217,14 @@ class StaffApi {
     String mode, {
     num? percentage,
     String? code,
+    int? promotionId,
   }) async =>
       (await request('tables/$tableId/discount', {
             'version': version,
             'mode': mode,
             if (mode == 'manual') 'percentage': percentage,
-            if (mode == 'voucher') 'code': code,
+            if (mode == 'voucher' || mode == 'discount_code') 'code': code,
+            if (mode == 'promotion') 'promotionId': promotionId,
           }))['invoice']
           as Map<String, dynamic>;
   Future<Map<String, dynamic>> pay(

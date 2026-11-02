@@ -11,6 +11,8 @@ import { openDiningSession } from './customer-sessions.js';
 import {MenuError,menuInput,updateMenuInput,categoryInput,updateCategoryInput,availabilityInput,readManagedMenu,saveMenuItem,saveCategory,setMenuAvailability} from './menu-management.js';
 import {readManagementOverview} from './management-overview.js';
 import {readItemTimings} from './item-timing.js';
+import {PromotionError,promotionInput,readPromotions,readPromotion,savePromotion,togglePromotion,evaluatePromotion} from './promotions.js';
+import {DiscountCodeError,discountCodeInput,discountCodeText,readDiscountCodes,saveDiscountCode,toggleDiscountCode,findDiscountCode,validateDiscountCode,lockInvoiceDiscountCode,redeemInvoiceDiscountCode} from './discount-codes.js';
 import {UserManagementError,createUserInput,updateUserInput,resetPasswordInput,deleteUserInput,readEmployees,createEmployee,updateEmployee,resetEmployeePassword,deleteEmployee} from './user-management.js';
 
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -47,6 +49,65 @@ export function createStaffApp(db: Pool) {
     if (!rows[0] || !verifyPassword(input.password, rows[0].passwordHash)) throw new ApiError(401,'Tên đăng nhập hoặc mật khẩu không đúng.');
     const user = {id:Number(rows[0].id),username:rows[0].username,displayName:rows[0].displayName,role:rows[0].role as Role,sessionVersion:Number(rows[0].sessionVersion)};
     res.json({token:createToken(user),user});
+  }));
+  app.get(['/api/staff/management/discounts','/api/v1/manager/discounts'],requireRole('manager'),route(async (_req,res)=>{
+    res.set('Cache-Control','no-store').json(await readDiscountCodes(db));
+  }));
+  app.post(['/api/staff/management/discounts','/api/v1/manager/discounts'],requireRole('manager'),route(async (req,res)=>{
+    res.status(201).json(await saveDiscountCode(db,discountCodeInput.parse(req.body)));
+  }));
+  app.post(['/api/staff/management/discounts/:id','/api/v1/manager/discounts/:id'],requireRole('manager'),route(async (req,res)=>{
+    const {version,...fields}=z.object({version:z.number().int().positive()}).passthrough().parse(req.body);
+    res.json(await saveDiscountCode(db,discountCodeInput.parse(fields),id.parse(req.params.id),version));
+  }));
+  app.post(['/api/staff/management/discounts/:id/status','/api/v1/manager/discounts/:id/status'],requireRole('manager'),route(async (req,res)=>{
+    const input=z.object({version:z.number().int().positive(),isActive:z.boolean()}).strict().parse(req.body);
+    res.json(await toggleDiscountCode(db,id.parse(req.params.id),input.version,input.isActive));
+  }));
+  app.post(['/api/staff/tables/:id/discount-code/search','/api/v1/cashier/discounts/search'],requireRole('cashier','manager'),route(async(req,res)=>{
+    const tableId=id.parse(req.params.id??req.body.tableId);
+    const code=discountCodeText.parse(req.body.discountCode);
+    const c=await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [tables]=await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=?',[tableId]);
+      if(!['dining','waiting_payment'].includes(tables[0]?.status))throw new ApiError(409,'Bàn chưa có hóa đơn đang mở.');
+      const invoice=await readInvoice(c,tableId);
+      if(!invoice)throw new ApiError(409,'Bàn chưa có hóa đơn đang mở.');
+      const discount=await findDiscountCode(c,code);
+      if(!discount){
+        const [vouchers]=await c.query<RowDataPacket[]>(`SELECT percentage,min_amount,is_active,
+          (starts_at IS NULL OR starts_at<=CURRENT_TIMESTAMP) AND (ends_at IS NULL OR ends_at>=CURRENT_TIMESTAMP) AS inPeriod
+          FROM cashier_vouchers WHERE code=? FOR SHARE`,[code]);
+        const old=vouchers[0];
+        if(old){
+          if(!old.is_active)throw new DiscountCodeError(409,'Mã bị khóa.');
+          if(!old.inPeriod)throw new DiscountCodeError(409,'Mã hết hạn hoặc chưa đến ngày áp dụng.');
+          if(invoice.subtotalAmount<Number(old.min_amount))throw new DiscountCodeError(409,'Đơn chưa đủ giá trị tối thiểu.');
+          await c.commit();
+          res.set('Cache-Control','no-store').json({discount:{kind:'voucher',discountName:`Voucher ${code}`,discountCode:code,discountType:'percentage',discountPercent:Number(old.percentage),remainingQuantity:null,
+            discountAmount:Math.min(invoice.subtotalAmount,Math.round(invoice.subtotalAmount*Number(old.percentage)/100))}});return;
+        }
+      }
+      const result=validateDiscountCode(discount,invoice.subtotalAmount);
+      if(!result.applicable)throw new DiscountCodeError(409,result.reason!);
+      await c.commit();
+      res.set('Cache-Control','no-store').json({discount:{...discount,kind:'discount_code',discountAmount:result.discountAmount}});
+    } catch(error){await c.rollback();throw error;}finally{c.release();}
+  }));
+  app.get('/api/staff/management/promotions',requireRole('manager'),route(async (_req,res)=>{
+    res.set('Cache-Control','no-store').json({promotions:await readPromotions(db)});
+  }));
+  app.post('/api/staff/management/promotions',requireRole('manager'),route(async (req,res)=>{
+    res.status(201).json(await savePromotion(db,promotionInput.parse(req.body)));
+  }));
+  app.post('/api/staff/management/promotions/:id',requireRole('manager'),route(async (req,res)=>{
+    const {version,...fields}=z.object({version:z.number().int().positive()}).passthrough().parse(req.body);
+    res.json(await savePromotion(db,promotionInput.parse(fields),id.parse(req.params.id),version));
+  }));
+  app.post('/api/staff/management/promotions/:id/status',requireRole('manager'),route(async (req,res)=>{
+    const input=z.object({version:z.number().int().positive(),isActive:z.boolean()}).strict().parse(req.body);
+    res.json(await togglePromotion(db,id.parse(req.params.id),input.version,input.isActive));
   }));
   app.get('/api/staff/management/users',requireRole('manager'),route(async (_req,res)=>{
     res.set('Cache-Control','no-store').json(await readEmployees(db));
@@ -230,13 +291,34 @@ export function createStaffApp(db: Pool) {
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
   }));
   app.get('/api/staff/cashier/history', requireRole('staff','cashier','manager'), route(async (req,res) => {
-    const input=z.object({q:z.string().trim().max(100).default(''),offset:z.coerce.number().int().min(0).default(0),limit:z.coerce.number().int().min(1).max(50).default(30)}).parse(req.query);
+    const input=z.object({q:z.string().trim().max(100).default(''),offset:z.coerce.number().int().min(0).default(0),limit:z.coerce.number().int().min(1).max(50).default(30),discounted:z.enum(['true','false']).default('false')}).parse(req.query);
     const filter='%'+input.q.replace(/[\\%_]/g,'\\$&')+'%';
-    const where='WHERE invoice_code LIKE ? OR table_code LIKE ?';
+    const discountAmount="COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.discountAmount')) AS DECIMAL(12,2)),0)";
+    const where=`WHERE (invoice_code LIKE ? OR table_code LIKE ?) ${input.discounted==='true'?`AND ${discountAmount}>0`:''}`;
     const [rows]=await db.query<RowDataPacket[]>(`SELECT id AS historyId,invoice_code AS invoiceCode,table_code AS tableCode,total_amount AS totalAmount,
-      payment_method AS paymentMethod,paid_at AS paidAt,cashier_name AS cashierName FROM cashier_invoices ${where} ORDER BY paid_at DESC,id DESC LIMIT ? OFFSET ?`,[filter,filter,input.limit,input.offset]);
+      payment_method AS paymentMethod,paid_at AS paidAt,cashier_name AS cashierName,
+      ${discountAmount} AS discountAmount,JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.promotionName')) AS promotionName,
+      JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.discountName')) AS discountName,JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.discountCode')) AS discountCode,
+      JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.voucherCode')) AS voucherCode
+      FROM cashier_invoices ${where} ORDER BY paid_at DESC,id DESC LIMIT ? OFFSET ?`,[filter,filter,input.limit,input.offset]);
     const [counts]=await db.query<RowDataPacket[]>(`SELECT COUNT(*) AS total FROM cashier_invoices ${where}`,[filter,filter]);
-    res.json({invoices:rows.map(r=>({...r,totalAmount:Number(r.totalAmount)})),total:Number(counts[0].total),offset:input.offset,limit:input.limit});
+    res.json({invoices:rows.map(r=>({...r,totalAmount:Number(r.totalAmount),discountAmount:Number(r.discountAmount),discountName:r.discountName==='null'?null:r.discountName,discountCode:r.discountCode==='null'?null:r.discountCode,promotionName:r.promotionName==='null'?null:r.promotionName,voucherCode:r.voucherCode==='null'?null:r.voucherCode})),total:Number(counts[0].total),offset:input.offset,limit:input.limit});
+  }));
+  app.get('/api/staff/tables/:id/promotions',requireRole('cashier','manager'),route(async (req,res)=>{
+    const c=await db.getConnection();
+    try {
+      await c.beginTransaction();
+      const tableId=id.parse(req.params.id);
+      const [tables]=await c.query<RowDataPacket[]>('SELECT status FROM restaurant_tables WHERE id=?',[tableId]);
+      if(!['dining','waiting_payment'].includes(tables[0]?.status))throw new ApiError(409,'Bàn chưa có hóa đơn đang mở.');
+      const invoice=await readInvoice(c,tableId);
+      if(!invoice)throw new ApiError(409,'Bàn chưa có hóa đơn đang mở.');
+      const promotions=(await readPromotions(c,true)).flatMap(p=>{
+        const result=evaluatePromotion({subtotalAmount:invoice.subtotalAmount,paymentStatus:'unpaid'},p);
+        return result.applicable?[{...p,discountAmount:result.discountAmount}]:[];
+      });
+      await c.commit();res.set('Cache-Control','no-store').json({promotions});
+    } catch(error){await c.rollback();throw error;} finally{c.release();}
   }));
   app.post('/api/staff/tables/:id/discount', requireRole('cashier','manager'), route(async (req,res) => {
     const tableId=id.parse(req.params.id);
@@ -244,6 +326,8 @@ export function createStaffApp(db: Pool) {
       z.object({mode:z.literal('none'),version:z.string().length(64)}).strict(),
       z.object({mode:z.literal('manual'),version:z.string().length(64),percentage:z.number().min(0).max(100).multipleOf(0.01)}).strict(),
       z.object({mode:z.literal('voucher'),version:z.string().length(64),code:z.string().trim().toUpperCase().regex(/^[A-Z0-9_-]{1,40}$/)}).strict(),
+      z.object({mode:z.literal('promotion'),version:z.string().length(64),promotionId:id}).strict(),
+      z.object({mode:z.literal('discount_code'),version:z.string().length(64),code:discountCodeText}).strict(),
     ]).parse(req.body);
     const c=await db.getConnection();
     try {
@@ -254,8 +338,29 @@ export function createStaffApp(db: Pool) {
       const before=await readInvoice(c,tableId);
       if (!before || !orders.length) throw new ApiError(409,'Không còn hóa đơn chờ thanh toán.');
       if (before.version!==input.version) throw new ApiError(409,'Hóa đơn đã thay đổi. Vui lòng tải lại trước khi áp dụng giảm giá.');
-      if (input.mode==='none' || (input.mode==='manual' && input.percentage===0)) {
-        await c.execute('DELETE FROM invoice_discounts WHERE first_order_id=?',[orders[0].id]);
+      // Do not DELETE absent selections: InnoDB gap locks can deadlock two new bills.
+      // The parent order is already locked, so this existence check is safe per bill.
+      const clearSelection=async(storage:'invoice_discount_codes'|'invoice_promotions'|'invoice_discounts')=>{
+        const [selected]=await c.query<RowDataPacket[]>(`SELECT first_order_id FROM ${storage} WHERE first_order_id=?`,[orders[0].id]);
+        if(selected.length)await c.execute(`DELETE FROM ${storage} WHERE first_order_id=?`,[orders[0].id]);
+      };
+      await clearSelection('invoice_discount_codes');
+      await clearSelection('invoice_promotions');
+      if(input.mode==='discount_code') {
+        const discount=await findDiscountCode(c,input.code);
+        const result=validateDiscountCode(discount,before.subtotalAmount);
+        if(!result.applicable)throw new DiscountCodeError(409,result.reason!);
+        await clearSelection('invoice_discounts');
+        await c.execute('INSERT INTO invoice_discount_codes(first_order_id,discount_id) VALUES(?,?)',[orders[0].id,discount!.id]);
+      } else if(input.mode==='promotion') {
+        const promotion=await readPromotion(c,input.promotionId);
+        if(!promotion)throw new ApiError(404,'Không tìm thấy chương trình.');
+        const eligibility=evaluatePromotion({subtotalAmount:before.subtotalAmount,paymentStatus:'unpaid'},promotion);
+        if(!eligibility.applicable)throw new ApiError(409,eligibility.reason!);
+        await clearSelection('invoice_discounts');
+        await c.execute('INSERT INTO invoice_promotions(first_order_id,promotion_id) VALUES(?,?)',[orders[0].id,input.promotionId]);
+      } else if (input.mode==='none' || (input.mode==='manual' && input.percentage===0)) {
+        await clearSelection('invoice_discounts');
       } else {
         await c.execute(`INSERT INTO invoice_discounts(first_order_id,mode,percentage,voucher_code) VALUES(?,?,?,?)
           ON DUPLICATE KEY UPDATE mode=VALUES(mode),percentage=VALUES(percentage),voucher_code=VALUES(voucher_code)`,
@@ -274,8 +379,8 @@ export function createStaffApp(db: Pool) {
     if (!rows.length) throw new ApiError(404,'Không tìm thấy hóa đơn đã lưu.');
     res.json({invoice:{...parseInvoiceSnapshot(rows[0].snapshot),historyId:Number(rows[0].id)}});
   }));
-  app.post('/api/staff/tables/:id/pay', requireRole('staff','cashier','manager'), route(async (req,res) => {
-    const tableId = id.parse(req.params.id);
+  app.post(['/api/staff/tables/:id/pay','/api/v1/orders/pay'], requireRole('staff','cashier','manager'), route(async (req,res) => {
+    const tableId = id.parse(req.params.id??req.body.tableId);
     const method = z.enum(['cash','bank_transfer','card']).parse(req.body.paymentMethod);
     const confirmUnserved = z.boolean().default(false).parse(req.body.confirmUnserved);
     const c = await db.getConnection();
@@ -288,6 +393,8 @@ export function createStaffApp(db: Pool) {
       if (pending.length && !confirmUnserved) throw new ApiError(409,'Đơn hàng còn món chưa phục vụ. Vui lòng xác nhận thanh toán ngay.');
       const [orders] = await c.query<RowDataPacket[]>('SELECT id,total_amount FROM orders WHERE table_id=? AND payment_status=\'unpaid\' AND status<>\'cancelled\' FOR UPDATE',[tableId]);
       if (!orders.length) throw new ApiError(409,'Bàn không còn hóa đơn chưa thanh toán.');
+      orders.sort((a,b)=>Number(a.id)-Number(b.id));
+      await lockInvoiceDiscountCode(c,Number(orders[0].id));
       const invoice = (await readInvoice(c,tableId))!;
       const version = z.string().length(64).optional().parse(req.body.version);
       if (version && version !== invoice.version) throw new ApiError(409,'Hóa đơn đã thay đổi. Vui lòng mở lại chi tiết trước khi thanh toán.');
@@ -295,6 +402,7 @@ export function createStaffApp(db: Pool) {
       if (invoice.discountError) throw new ApiError(409,invoice.discountError);
       const expected = z.array(z.string()).optional().parse(req.body.orderCodes);
       if (expected && JSON.stringify(expected) !== JSON.stringify(invoice.orderCodes)) throw new ApiError(409,'Hóa đơn đã thay đổi. Vui lòng mở lại chi tiết.');
+      await redeemInvoiceDiscountCode(c,Number(orders[0].id),invoice.subtotalAmount,invoice.invoiceCode);
       await c.execute(`UPDATE orders SET payment_status='paid',payment_method=?,paid_at=CURRENT_TIMESTAMP WHERE table_id=? AND payment_status='unpaid' AND status<>'cancelled'`,[method,tableId]);
       const [paidRows] = await c.query<RowDataPacket[]>('SELECT paid_at FROM orders WHERE id=?',[orders[0].id]);
       invoice.paidAt = new Date(paidRows[0].paid_at).toISOString();
@@ -368,7 +476,7 @@ export function createStaffApp(db: Pool) {
   }));
   app.use((_req,res)=>res.status(404).json({message:'Không tìm thấy API.'}));
   app.use((error: unknown,_req: express.Request,res: express.Response,_next: express.NextFunction) => {
-    if(error instanceof ApiError || error instanceof MenuError || error instanceof UserManagementError) { res.status(error.status).json({message:error.message}); return; }
+    if(error instanceof ApiError || error instanceof MenuError || error instanceof UserManagementError || error instanceof PromotionError || error instanceof DiscountCodeError) { res.status(error.status).json({message:error.message}); return; }
     if(error instanceof ZodError || error instanceof SyntaxError) {res.status(400).json({message:'Dữ liệu gửi lên không hợp lệ.'});return;}
     console.error('Staff API failed:', (error as {code?:string}).code ?? 'UNKNOWN');
     res.status(503).json({message:'Không thể lưu hoặc tải dữ liệu MySQL. Vui lòng thử lại.'});
