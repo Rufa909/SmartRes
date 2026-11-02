@@ -11,6 +11,8 @@ import 'cashier_page.dart';
 import 'cashier_history_page.dart';
 import 'invoice_dialog.dart';
 import 'restaurant_theme.dart';
+import 'personnel_management_page.dart';
+import 'item_timing_page.dart';
 
 String _money(num value) =>
     '${value.round().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+$)'), (m) => '${m[1]}.')} đ';
@@ -387,6 +389,31 @@ class _ManagerPageState extends State<ManagerPage> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: shortcut(
+                      'Quản lý nhân sự',
+                      Icons.manage_accounts_outlined,
+                      const Color(0xFF3366CC),
+                      () => open(PersonnelManagementPage(api: widget.api)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: shortcut(
+                      'Thời gian và trạng thái ra món',
+                      Icons.timer_outlined,
+                      const Color(0xFF23886B),
+                      () => open(ItemTimingPage(api: widget.api)),
+                    ),
+                  ),
+                ],
+              ),
             ),
             if (operations != null) ...[
               const SizedBox(height: 18),

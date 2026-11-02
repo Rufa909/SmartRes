@@ -7,7 +7,7 @@ import {once} from 'node:events';
 import type {Server} from 'node:http';
 import {createStaffApp} from '../src/staff-app.js';
 import {createApp} from '../src/app.js';
-import {createToken} from '../src/auth.js';
+import {createToken,hashPassword} from '../src/auth.js';
 import {ensureInvoiceStorage} from '../src/invoice-storage.js';
 import {ensureCustomerSessions,hashCustomerToken} from '../src/customer-sessions.js';
 
@@ -21,6 +21,10 @@ test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh to�
   try {
     const schema=await readFile(new URL('../../../database/staff-schema.sql',import.meta.url),'utf8');
     for(const sql of schema.split(';').filter(s=>s.trim())) await db.query(sql);
+    await db.execute('INSERT INTO users(id,username,display_name,role,password_hash) VALUES(1,?,?,?,?),(2,?,?,?,?)',[
+      'staff-test','Staff test','staff',hashPassword('Staff@123'),
+      'kitchen-test','Kitchen test','kitchen',hashPassword('Kitchen@123'),
+    ]);
     await ensureInvoiceStorage(db);
     await ensureCustomerSessions(db);
     await ensureCustomerSessions(db); // migration chạy lại không mất dữ liệu

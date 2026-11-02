@@ -87,6 +87,29 @@ class StaffApi {
 
   Future<Map<String, dynamic>> snapshot() => request('snapshot');
   Future<Map<String, dynamic>> managedMenu() => request('management/menu');
+  Future<Map<String, dynamic>> managedUsers() => request('management/users');
+  Future<Map<String, dynamic>> itemTimings({
+    String status = '',
+    String query = '',
+    String? date,
+    int offset = 0,
+  }) => request(
+    'management/item-timings?${Uri(queryParameters: {if (status.isNotEmpty) 'status': status, if (query.trim().isNotEmpty) 'q': query.trim(), 'date': ?date, 'offset': '$offset'}).query}',
+  );
+  Future<Map<String, dynamic>> saveEmployee(
+    Map<String, dynamic> body, {
+    int? id,
+  }) => request(id == null ? 'management/users' : 'management/users/$id', body);
+  Future<Map<String, dynamic>> resetEmployeePassword(
+    int id,
+    int version,
+    String password,
+  ) => request('management/users/$id/password', {
+    'version': version,
+    'password': password,
+  });
+  Future<Map<String, dynamic>> deleteEmployee(int id, int version) =>
+      request('management/users/$id/delete', {'version': version});
   Future<Map<String, dynamic>> managementOverview(
     String from,
     String to,

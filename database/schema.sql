@@ -60,7 +60,12 @@ CREATE TABLE IF NOT EXISTS order_items (
   unit_price DECIMAL(12, 2) NOT NULL,
   options_json JSON,
   note TEXT,
-  status ENUM('preparing', 'cooking', 'completed') NOT NULL DEFAULT 'preparing',
+  status ENUM('preparing', 'cooking', 'completed', 'served') NOT NULL DEFAULT 'preparing',
+  created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  cooking_started_at TIMESTAMP NULL,
+  completed_at TIMESTAMP NULL,
+  served_at TIMESTAMP NULL,
+  INDEX idx_item_timing_created (created_at,id),
   CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders(id),
   CONSTRAINT fk_order_items_menu_item FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
 );

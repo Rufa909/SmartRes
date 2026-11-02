@@ -23,6 +23,61 @@ Widget page(http.Client client) => MaterialApp(
 );
 
 void main() {
+  testWidgets('Truy cập nhanh mở Thời gian và trạng thái ra món', (
+    tester,
+  ) async {
+    final client = MockClient(
+      (req) async => req.url.path.endsWith('/item-timings')
+          ? response({
+              'items': [],
+              'total': 0,
+              'limit': 30,
+              'counts': {
+                'preparing': 0,
+                'cooking': 0,
+                'completed': 0,
+                'served': 0,
+              },
+              'generatedAt': '2026-11-02T03:00:00Z',
+            })
+          : response(overviewFixture()),
+    );
+    addTearDown(client.close);
+    await tester.pumpWidget(page(client));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Thời gian và trạng thái ra món'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(find.text('Thời gian và trạng thái ra món'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Thời gian và trạng thái ra món'));
+    await tester.pumpAndSettle();
+    expect(find.text('Theo dõi tiến độ từng món'), findsOneWidget);
+    expect(find.text('Không có món phù hợp.'), findsOneWidget);
+  });
+
+  testWidgets('Truy cập nhanh mở Quản lý nhân sự', (tester) async {
+    final client = MockClient(
+      (req) async => req.url.path.endsWith('/users')
+          ? response({'users': []})
+          : response(overviewFixture()),
+    );
+    addTearDown(client.close);
+    await tester.pumpWidget(page(client));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Quản lý nhân sự'),
+      250,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Quản lý nhân sự'));
+    await tester.pumpAndSettle();
+    expect(find.text('Thêm tài khoản'), findsOneWidget);
+    expect(find.text('0 tài khoản nhân sự'), findsOneWidget);
+  });
+
   testWidgets(
     'Tổng quan hiện doanh thu, biểu đồ, vận hành và món bán chạy trên màn hình nhỏ',
     (tester) async {

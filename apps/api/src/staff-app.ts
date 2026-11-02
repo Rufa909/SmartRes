@@ -10,6 +10,8 @@ import { parseInvoiceSnapshot } from './invoice-storage.js';
 import { openDiningSession } from './customer-sessions.js';
 import {MenuError,menuInput,updateMenuInput,categoryInput,updateCategoryInput,availabilityInput,readManagedMenu,saveMenuItem,saveCategory,setMenuAvailability} from './menu-management.js';
 import {readManagementOverview} from './management-overview.js';
+import {readItemTimings} from './item-timing.js';
+import {UserManagementError,createUserInput,updateUserInput,resetPasswordInput,deleteUserInput,readEmployees,createEmployee,updateEmployee,resetEmployeePassword,deleteEmployee} from './user-management.js';
 
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 const id = z.coerce.number().int().positive();
@@ -25,24 +27,47 @@ export function createStaffApp(db: Pool) {
   const app = express();
   app.use(helmet(), cors({origin: ['http://127.0.0.1:5178','http://localhost:5178']}), express.json({limit:'32kb'}));
   const route = (fn: RequestHandler): RequestHandler => (req,res,next) => { Promise.resolve(fn(req,res,next)).catch(next); };
-  const requireRole = (...roles: Role[]): RequestHandler => (req,res,next) => {
+  const requireRole = (...roles: Role[]): RequestHandler => route(async (req,res,next) => {
     const header = req.header('authorization') || '';
     const user = header.startsWith('Bearer ') ? readToken(header.slice(7)) : null;
     if (!user) { res.status(401).json({message:'Bạn chưa đăng nhập hoặc phiên đã hết hạn.'}); return; }
     if (!roles.includes(user.role)) { res.status(403).json({message:'Tài khoản không có quyền thực hiện thao tác này.'}); return; }
-    (req as express.Request & {user: typeof user}).user = user;
+    const [accounts]=await db.query<RowDataPacket[]>('SELECT id,username,display_name AS displayName,role,session_version AS sessionVersion FROM users WHERE id=? AND is_active=1',[user.id]);
+    const account=accounts[0];
+    if(!account || Number(account.sessionVersion)!==(user.sessionVersion??0) || account.role!==user.role) {
+      res.status(401).json({message:'Tài khoản hoặc mật khẩu đã thay đổi. Vui lòng đăng nhập lại.'});return;
+    }
+    (req as express.Request & {user: AuthUser}).user = {id:Number(account.id),username:account.username,displayName:account.displayName,role:account.role,sessionVersion:Number(account.sessionVersion)};
     next();
-  };
+  });
   app.get('/api/health', route(async (_req,res) => { await db.query('SELECT 1'); res.json({status:'ok',storage:'mysql'}); }));
   app.post('/api/auth/login', route(async (req,res) => {
     const input = z.object({username:z.string().min(3).max(60),password:z.string().min(6).max(200)}).parse(req.body);
-    const [rows] = await db.query<RowDataPacket[]>('SELECT id,username,display_name AS displayName,role,password_hash AS passwordHash FROM users WHERE username=? AND is_active=1 LIMIT 1',[input.username]);
+    const [rows] = await db.query<RowDataPacket[]>('SELECT id,username,display_name AS displayName,role,password_hash AS passwordHash,session_version AS sessionVersion FROM users WHERE username=? AND is_active=1 LIMIT 1',[input.username]);
     if (!rows[0] || !verifyPassword(input.password, rows[0].passwordHash)) throw new ApiError(401,'Tên đăng nhập hoặc mật khẩu không đúng.');
-    const user = {id:Number(rows[0].id),username:rows[0].username,displayName:rows[0].displayName,role:rows[0].role as Role};
+    const user = {id:Number(rows[0].id),username:rows[0].username,displayName:rows[0].displayName,role:rows[0].role as Role,sessionVersion:Number(rows[0].sessionVersion)};
     res.json({token:createToken(user),user});
+  }));
+  app.get('/api/staff/management/users',requireRole('manager'),route(async (_req,res)=>{
+    res.set('Cache-Control','no-store').json(await readEmployees(db));
+  }));
+  app.post('/api/staff/management/users',requireRole('manager'),route(async (req,res)=>{
+    res.status(201).json(await createEmployee(db,createUserInput.parse(req.body)));
+  }));
+  app.post('/api/staff/management/users/:id',requireRole('manager'),route(async (req,res)=>{
+    res.json(await updateEmployee(db,id.parse(req.params.id),updateUserInput.parse(req.body)));
+  }));
+  app.post('/api/staff/management/users/:id/password',requireRole('manager'),route(async (req,res)=>{
+    res.json(await resetEmployeePassword(db,id.parse(req.params.id),resetPasswordInput.parse(req.body)));
+  }));
+  app.post('/api/staff/management/users/:id/delete',requireRole('manager'),route(async (req,res)=>{
+    res.json(await deleteEmployee(db,id.parse(req.params.id),deleteUserInput.parse(req.body)));
   }));
   app.get('/api/staff/management/menu',requireRole('manager'),route(async (_req,res)=>{
     res.set('Cache-Control','no-store').json(await readManagedMenu(db));
+  }));
+  app.get('/api/staff/management/item-timings',requireRole('manager'),route(async (req,res)=>{
+    res.set('Cache-Control','no-store').json(await readItemTimings(db,req.query));
   }));
   app.get('/api/staff/management/overview',requireRole('manager'),route(async (req,res)=>{
     res.set('Cache-Control','no-store').json(await readManagementOverview(db,req.query));
@@ -320,7 +345,10 @@ export function createStaffApp(db: Pool) {
     const previous=status==='cooking'?'preparing':'cooking';
     // Cập nhật có điều kiện: hai thiết bị không thể đưa món lùi trạng thái.
     const [result]=await db.execute<ResultSetHeader>(`UPDATE order_items i JOIN orders o ON o.id=i.order_id
-      SET i.status=? WHERE i.id=? AND i.status=? AND o.status<>'cancelled' AND o.payment_status='unpaid'`,[status,itemId,previous]);
+      SET i.status=?,
+        i.cooking_started_at=IF(?='cooking',COALESCE(i.cooking_started_at,CURRENT_TIMESTAMP),i.cooking_started_at),
+        i.completed_at=IF(?='completed',COALESCE(i.completed_at,CURRENT_TIMESTAMP),i.completed_at)
+      WHERE i.id=? AND i.status=? AND o.status<>'cancelled' AND o.payment_status='unpaid'`,[status,status,status,itemId,previous]);
     if(!result.affectedRows) {
       const [rows]=await db.query<RowDataPacket[]>(`SELECT i.status FROM order_items i JOIN orders o ON o.id=i.order_id
         WHERE i.id=? AND o.status<>'cancelled' AND o.payment_status='unpaid'`,[itemId]);
@@ -331,7 +359,7 @@ export function createStaffApp(db: Pool) {
   app.post('/api/staff/items/:id/serve', requireRole('staff','manager'), route(async (req,res) => {
     const itemId=id.parse(req.params.id);
     const [result]=await db.execute<ResultSetHeader>(`UPDATE order_items i JOIN orders o ON o.id=i.order_id
-      SET i.status='served',i.served_at=CURRENT_TIMESTAMP WHERE i.id=? AND i.status='completed' AND o.status<>'cancelled'`,[itemId]);
+      SET i.status='served',i.served_at=COALESCE(i.served_at,CURRENT_TIMESTAMP) WHERE i.id=? AND i.status='completed' AND o.status<>'cancelled'`,[itemId]);
     if(!result.affectedRows) {
       const [rows]=await db.query<RowDataPacket[]>('SELECT status FROM order_items WHERE id=?',[itemId]);
       if(rows[0]?.status!=='served') throw new ApiError(409,'Món chưa hoàn thành hoặc không tồn tại.');
@@ -340,7 +368,7 @@ export function createStaffApp(db: Pool) {
   }));
   app.use((_req,res)=>res.status(404).json({message:'Không tìm thấy API.'}));
   app.use((error: unknown,_req: express.Request,res: express.Response,_next: express.NextFunction) => {
-    if(error instanceof ApiError || error instanceof MenuError) { res.status(error.status).json({message:error.message}); return; }
+    if(error instanceof ApiError || error instanceof MenuError || error instanceof UserManagementError) { res.status(error.status).json({message:error.message}); return; }
     if(error instanceof ZodError || error instanceof SyntaxError) {res.status(400).json({message:'Dữ liệu gửi lên không hợp lệ.'});return;}
     console.error('Staff API failed:', (error as {code?:string}).code ?? 'UNKNOWN');
     res.status(503).json({message:'Không thể lưu hoặc tải dữ liệu MySQL. Vui lòng thử lại.'});

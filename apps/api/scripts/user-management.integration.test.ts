@@ -1,0 +1,94 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import mysql,{type RowDataPacket} from 'mysql2/promise';
+import dotenv from 'dotenv';
+import {readFile} from 'node:fs/promises';
+import {randomBytes} from 'node:crypto';
+import {once} from 'node:events';
+import {createStaffApp} from '../src/staff-app.js';
+import {hashPassword,verifyPassword} from '../src/auth.js';
+import {ensureUserManagementStorage} from '../src/user-management.js';
+dotenv.config({path:new URL('../../../.env.mysql.local',import.meta.url),quiet:true});
+dotenv.config({path:new URL('../../../.env',import.meta.url),quiet:true});
+
+test('Nhân sự: phân quyền, tạo/sửa/xóa, cấp mật khẩu và thu hồi phiên cũ',async()=>{
+  const config={host:process.env.MYSQL_HOST,port:Number(process.env.MYSQL_PORT||3306),user:process.env.MYSQL_USER,password:process.env.MYSQL_PASSWORD};
+  const admin=await mysql.createConnection(config);
+  const name=`smartres_users_test_${randomBytes(6).toString('hex')}`;
+  await admin.query(`CREATE DATABASE \`${name}\` CHARACTER SET utf8mb4`);
+  const db=mysql.createPool({...config,database:name,connectionLimit:5});
+  let server:ReturnType<ReturnType<typeof createStaffApp>['listen']>|undefined;
+  try {
+    const schema=await readFile(new URL('../../../database/staff-schema.sql',import.meta.url),'utf8');
+    for(const sql of schema.split(';').filter(s=>s.trim()))await db.query(sql);
+    await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES(?,?,?,?)',['manager','Quản lý','manager',hashPassword('Manager@123')]);
+    await db.query('ALTER TABLE users DROP COLUMN session_version');
+    await ensureUserManagementStorage(db);await ensureUserManagementStorage(db);
+    server=createStaffApp(db).listen(0,'127.0.0.1');await once(server,'listening');
+    let origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+    const login=(username:string,password:string)=>fetch(origin+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const req=(path:string,token?:string,body?:unknown)=>fetch(origin+'/api/staff/'+path,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+    const manager=(await (await login('manager','Manager@123')).json()).token;
+    const base='management/users';
+    assert.equal((await req(base)).status,401);
+    const initial=await req(base,manager);assert.equal(initial.status,200);
+    assert.deepEqual((await initial.json()).users,[]);
+    const employees=[];
+    for(const role of ['staff','kitchen','cashier']) {
+      const input={username:`test_${role}`,displayName:`Tên ${role}`,role,password:'Staff@123'};
+      const response=await req(base,manager,input);assert.equal(response.status,201);
+      const created=(await response.json()).user;employees.push(created);
+      assert.equal(created.version,0);assert.equal(created.password,undefined);assert.equal(created.password_hash,undefined);
+      const signedIn=await login(input.username,input.password);assert.equal(signedIn.status,200);
+      const token=(await signedIn.json()).token;
+      assert.equal((await req(base,token)).status,403);
+      assert.equal((await req(base,token,input)).status,403);
+      assert.equal((await req(`${base}/${created.id}`,token,{...input,version:0})).status,403);
+      assert.equal((await req(`${base}/${created.id}/password`,token,{password:'Next@123',version:0})).status,403);
+      assert.equal((await req(`${base}/${created.id}/delete`,token,{version:0})).status,403);
+    }
+    assert.equal((await req(base,manager,{username:'bad',displayName:'Test',role:'manager',password:'Staff@123'})).status,400);
+    assert.equal((await req(base,manager,{username:'bad',displayName:' ',role:'staff',password:'123'})).status,400);
+    assert.equal((await req(base,manager,{username:'test_staff',displayName:'Trùng',role:'staff',password:'Staff@123'})).status,409);
+    const staff=employees[0];
+    const oldToken=(await (await login('test_staff','Staff@123')).json()).token;
+    assert.equal((await req('snapshot',oldToken)).status,200);
+    const changed={username:'staff_renamed',displayName:'Tên đã sửa',role:'cashier',version:staff.version};
+    const edit=await req(`${base}/${staff.id}`,manager,changed);assert.equal(edit.status,200);
+    const updated=(await edit.json()).user;assert.equal(updated.version,1);
+    assert.equal((await req('snapshot',oldToken)).status,401);
+    assert.equal((await login('test_staff','Staff@123')).status,401);
+    const cashierLogin=await login('staff_renamed','Staff@123');assert.equal(cashierLogin.status,200);
+    const cashierToken=(await cashierLogin.json()).token;
+    assert.equal((await req('cashier/tables',cashierToken)).status,200);
+    assert.equal((await req(`${base}/${staff.id}`,manager,changed)).status,409);
+    assert.equal((await req(`${base}/1`,manager,{...changed,username:'manager',version:0})).status,403);
+    assert.equal((await req(`${base}/1/password`,manager,{password:'Next@123',version:0})).status,403);
+    assert.equal((await req(`${base}/1/delete`,manager,{version:0})).status,403);
+    assert.equal((await req(`${base}/${staff.id}/password`,manager,{password:'Reset@123',version:0})).status,409);
+    assert.equal((await req(`${base}/${staff.id}/password`,manager,{password:'Reset@123',version:updated.version})).status,200);
+    assert.equal((await req('cashier/tables',cashierToken)).status,401);
+    assert.equal((await login('staff_renamed','Staff@123')).status,401);
+    const resetLogin=await login('staff_renamed','Reset@123');assert.equal(resetLogin.status,200);
+    const resetToken=(await resetLogin.json()).token;
+    const [stored]=await db.query<RowDataPacket[]>('SELECT password_hash FROM users WHERE id=?',[staff.id]);
+    assert.notEqual(stored[0].password_hash,'Reset@123');assert.ok(verifyPassword('Reset@123',stored[0].password_hash));
+    const listed=(await (await req(base,manager)).json()).users;
+    assert.equal(listed.length,3);assert.ok(!JSON.stringify(listed).includes('password'));
+    const current=listed.find((u:{id:number})=>u.id===staff.id);
+    const deletes=await Promise.all([req(`${base}/${staff.id}/delete`,manager,{version:current.version}),req(`${base}/${staff.id}/delete`,manager,{version:current.version})]);
+    assert.deepEqual(deletes.map(r=>r.status).sort(),[200,404]);
+    assert.equal((await req('cashier/tables',resetToken)).status,401);
+    assert.equal((await login('staff_renamed','Reset@123')).status,401);
+    assert.equal((await (await req(base,manager)).json()).users.length,2);
+    // Verify persistence through a fresh app instance.
+    await new Promise<void>((resolve,reject)=>server!.close(e=>e?reject(e):resolve()));
+    server=createStaffApp(db).listen(0,'127.0.0.1');await once(server,'listening');
+    origin=`http://127.0.0.1:${(server.address() as {port:number}).port}`;
+    assert.equal((await (await req(base,manager)).json()).users.length,2);
+    assert.equal((await login('test_kitchen','Staff@123')).status,200);
+  } finally {
+    if(server)await new Promise<void>(resolve=>server!.close(()=>resolve()));
+    await db.end();await admin.query(`DROP DATABASE \`${name}\``);await admin.end();
+  }
+});

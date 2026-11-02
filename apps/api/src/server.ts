@@ -4,12 +4,14 @@ import { env } from "./config/env.js";
 import { ensureCustomerSessions } from './customer-sessions.js';
 import { db } from './infrastructure/database.js';
 import {ensureMenuStorage} from './menu-storage.js';
+import {ensureItemTimingStorage} from './item-timing.js';
 
 const { app } = createApp();
 const server = http.createServer(app);
 
 await ensureCustomerSessions(db);
 await ensureMenuStorage(db);
+await ensureItemTimingStorage(db);
 
 server.listen(env.CUSTOMER_API_PORT, "127.0.0.1", () => {
   console.log(`SmartRes Customer API listening on port ${env.CUSTOMER_API_PORT}`);

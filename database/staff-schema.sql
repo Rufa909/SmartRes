@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
  id BIGINT PRIMARY KEY AUTO_INCREMENT, username VARCHAR(60) NOT NULL UNIQUE,
  display_name VARCHAR(120) NOT NULL, password_hash VARCHAR(220) NOT NULL,
  role ENUM('staff','kitchen','cashier','manager') NOT NULL, is_active BOOLEAN NOT NULL DEFAULT TRUE,
+ session_version INT UNSIGNED NOT NULL DEFAULT 0,
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS restaurant_tables (
@@ -37,7 +38,11 @@ CREATE TABLE IF NOT EXISTS order_items (
  id BIGINT PRIMARY KEY AUTO_INCREMENT, order_id BIGINT NOT NULL, menu_item_id BIGINT NOT NULL,
  item_name VARCHAR(160) NOT NULL, quantity INT NOT NULL, unit_price DECIMAL(12,2) NOT NULL,
  status ENUM('preparing','cooking','completed','served') NOT NULL DEFAULT 'preparing',
+ created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+ cooking_started_at TIMESTAMP NULL,
+ completed_at TIMESTAMP NULL,
  served_at TIMESTAMP NULL,
+ INDEX idx_item_timing_created (created_at,id),
  options_json JSON NULL,
  note TEXT NULL,
  FOREIGN KEY (order_id) REFERENCES orders(id), FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)

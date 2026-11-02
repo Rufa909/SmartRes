@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 
 export type Role = 'staff' | 'kitchen' | 'cashier' | 'manager';
-export type AuthUser = { id: number; username: string; displayName: string; role: Role };
+export type AuthUser = { id: number; username: string; displayName: string; role: Role; sessionVersion?: number };
 
 const secret = process.env.SMARTRES_AUTH_SECRET || 'smartres-dev-secret-change-me';
 const encode = (value: string) => Buffer.from(value).toString('base64url');

@@ -5,7 +5,7 @@ import {readFile} from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
 import {once} from 'node:events';
 import {createStaffApp} from '../src/staff-app.js';
-import {createToken,type Role} from '../src/auth.js';
+import {createToken,hashPassword,type Role} from '../src/auth.js';
 import {ensureInvoiceStorage} from '../src/invoice-storage.js';
 import {overviewPeriod} from '../src/management-overview.js';
 import dotenv from 'dotenv';
@@ -34,6 +34,7 @@ test('Tổng quan: doanh thu sau giảm giá, không đếm trùng, biên ngày,
   try {
     const schema=await readFile(new URL('../../../database/staff-schema.sql',import.meta.url),'utf8');
     for(const sql of schema.split(';').filter(s=>s.trim()))await db.query(sql);
+    await db.execute('INSERT INTO users(id,username,display_name,role,password_hash) VALUES(1,?,?,?,?)',['manager','manager','manager',hashPassword('Manager@123')]);
     await ensureInvoiceStorage(db);
     // Chứng minh báo cáo không phụ thuộc MySQL đang cấu hình UTC hay UTC+7.
     await db.query("SET time_zone='+00:00'");

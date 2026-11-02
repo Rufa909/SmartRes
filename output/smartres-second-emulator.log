@@ -1,0 +1,398 @@
+INFO         | Android emulator version 37.2.12.0 (build_id 16428233) (CL:N/A)
+INFO         | Graphics backend: gfxstream
+INFO         | Found systemPath C:\Users\nhung\AppData\Local\Android\Sdk\system-images\android-36\google_apis_playstore\x86_64\
+INFO         | Guest usage of host flag 'VulkanVirtualQueue' will be ignored.
+INFO         | Increasing RAM size to 2560MB
+INFO         | IPv4 server found: 10.53.120.33
+INFO         | Ignore IPv6 address: e056:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: e056:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: e056:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: f85c:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: f85c:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: f85c:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: d06d:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: d06d:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: d06d:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: b079:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: b079:8060:1e02:0:e056:8060:1e02:0
+INFO         | Ignore IPv6 address: b079:8060:1e02:0:e056:8060:1e02:0
+INFO         | Guest GLES Driver: Auto (ext controls)
+INFO         | emuglConfig_get_vulkan_hardware_gpu_support_info: Found physical GPU 'NVIDIA GeForce RTX 4050 Laptop GPU', type: VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU, apiVersion: 1.4.325, driverVersion: 591.66
+
+INFO         | emuglConfig_init: vulkan_mode_selected:host gles_mode_selected:host
+INFO         | Checking system compatibility:
+INFO         |   Checking: hasCompatibleHypervisor
+INFO         |      Ok: Hypervisor compatibility to run avd: `SmartRes_Second` are met
+INFO         |   Checking: hasSufficientSystem
+INFO         |      Ok: System requirements to run avd: `SmartRes_Second` are met
+INFO         |   Checking: hasSufficientHwGpu
+INFO         |      Ok: Hardware GPU requirements to run avd: `SmartRes_Second` are passed
+INFO         |   Checking: hasSufficientDiskSpace
+INFO         |      Ok: Disk space requirements to run avd: `SmartRes_Second` are met
+INFO         | Critical: Failed to load opengl32sw (The specified module could not be found.) (:0, )
+INFO         | Warning: Software OpenGL failed. Falling back to system OpenGL. (:0, )
+INFO         | Storing crashdata in: C:\Users\nhung\AppData\Local\Temp\\AndroidEmulator\emu-crash-37.2.12.db, detection is enabled for process: 32228
+INFO         | Initializing gfxstream backend
+INFO         | startOpenglesRendererImpl: gpu info
+INFO         | GPU #1
+  Make: 10de
+  Model: NVIDIA GeForce RTX 4050 Laptop GPU
+  Device ID: 28e1
+
+INFO         | Disabling implicit Vulkan layers to avoid compatibility issues. Set VK_LOADER_LAYERS_DISABLE manually to disable this behavior.
+INFO         | SharedLibrary::open for [C:\Users\nhung\AppData\Local\Android\Sdk\emulator\qemu\windows-x86_64\lib64\vulkan\vulkan-1.dll]
+INFO         | SharedLibrary::open for [C:\Users\nhung\AppData\Local\Android\Sdk\emulator\lib64\vulkan\vulkan-1.dll]
+INFO         | Added library: C:\Users\nhung\AppData\Local\Android\Sdk\emulator\lib64\vulkan\vulkan-1.dll
+INFO         | Selecting Vulkan device: NVIDIA GeForce RTX 4050 Laptop GPU, Version: 1.4.325
+INFO         | Using Vulkan externalMemoryMode: OpaqueWin32 for VkEmulation
+INFO         | Initializing VkEmulation features:
+INFO         |     glInteropSupported: true
+INFO         |     useDeferredCommands: true
+INFO         |     createResourceWithRequirements: true
+INFO         |     useVulkanComposition: false
+INFO         |     useVulkanNativeSwapchain: false
+INFO         |     enable guestRenderDoc: false
+INFO         |     ASTC LDR emulation mode: Gpu
+INFO         |     enable ETC2 emulation: true
+INFO         |     enable Ycbcr emulation: false
+INFO         |     guestVulkanOnly: false
+INFO         |     useDedicatedAllocations: false
+INFO         |     guestVulkanMaxApiVersion: 1.3.0
+INFO         |     enableProtectedMemoryEmulation: false
+INFO         | Graphics Adapter Vendor Google (NVIDIA Corporation)
+INFO         | Graphics Adapter Android Emulator OpenGL ES Translator (NVIDIA GeForce RTX 4050 Laptop GPU/PCIe/SSE2)
+INFO         | Graphics API Version OpenGL ES 3.0 (4.5.0 NVIDIA 591.66)
+INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_OVR_multiview2 GL_EXT_multiview_texture_multisample GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 GL_EXT_texture_buffer 
+INFO         | Graphics Device Extensions N/A
+INFO         | Disabling sparse binding feature support
+INFO         | Sending adb public key [QAAAAFGosgRPX+iHofta79SFM4bYHaruVaDzfuNyaA4HYV2aPHt3LrwsTcZJV5T+wbIyLQ5Htk1IZQDY8XcrUI8+hNEwUsiqASCmULvGkYb/m9AYhg4FzQA3RxXydwv8cTuElshNgMS7J8hP4eC7VPT/FVddlwpTGcp+8NzDyg7jIsIOlN8kefR/Ov5jfbWB6fOhA/D04JxZdcLN4OifZXmHz8B/maHTLjX1VzoEgovy0nsH097kLA+FwjaZwB1ymK4LAT+K4IqyIaCmj9eT25PNavjQJv7t7L8pgnj0BSmticHvbQHWOYBCPCs16tkYXW5Y80/xmBY2QisA859Sp8B9Y58Ve4WFN9Im02YnGu9b24mqmCHx+6uZfjBHRtWMID1b7rM5Cp2KALMkkoTBaxB/dMpKmbHMXZo+Yl7XKbUGjdCZ7PzpaBpTVxy7DMW9S6iqWqV257s0O7mUQwxfxkCAFVilQGDQkxuiB2acwoE8H+dPPOlY/Q21NVM9Sjm8KTf6pBU0nYhzTd5dCmX2siiERxaQ523UHc+tOLceG/UgcGMFnOPB/r4npNibg5AguJTvUYy+aqk+E/Y84aEvPfpn5a7fQBMCwd6VqJBxpVfS79Rv6K5erwKB223nzQa9CZhtPjlTTXpeHNkfgnGoOFMK8b8fIslpQ67GmjPUsZBqy+taPU22BgEAAQA= @unknown]
+INFO         | Userspace boot properties:
+INFO         |   androidboot.boot_devices=pci0000:00/0000:00:03.0 pci0000:00/0000:00:06.0
+INFO         |   androidboot.dalvik.vm.heapsize=576m
+INFO         |   androidboot.debug.hwui.renderer=skiagl
+INFO         |   androidboot.hardware=ranchu
+INFO         |   androidboot.hardware.gltransport=pipe
+INFO         |   androidboot.hardware.vulkan=ranchu
+INFO         |   androidboot.logcat=*:V
+INFO         |   androidboot.opengles.version=196609
+INFO         |   androidboot.qemu=1
+INFO         |   androidboot.qemu.adb.pubkey=QAAAAFGosgRPX+iHofta79SFM4bYHaruVaDzfuNyaA4HYV2aPHt3LrwsTcZJV5T+wbIyLQ5Htk1IZQDY8XcrUI8+hNEwUsiqASCmULvGkYb/m9AYhg4FzQA3RxXydwv8cTuElshNgMS7J8hP4eC7VPT/FVddlwpTGcp+8NzDyg7jIsIOlN8kefR/Ov5jfbWB6fOhA/D04JxZdcLN4OifZXmHz8B/maHTLjX1VzoEgovy0nsH097kLA+FwjaZwB1ymK4LAT+K4IqyIaCmj9eT25PNavjQJv7t7L8pgnj0BSmticHvbQHWOYBCPCs16tkYXW5Y80/xmBY2QisA859Sp8B9Y58Ve4WFN9Im02YnGu9b24mqmCHx+6uZfjBHRtWMID1b7rM5Cp2KALMkkoTBaxB/dMpKmbHMXZo+Yl7XKbUGjdCZ7PzpaBpTVxy7DMW9S6iqWqV257s0O7mUQwxfxkCAFVilQGDQkxuiB2acwoE8H+dPPOlY/Q21NVM9Sjm8KTf6pBU0nYhzTd5dCmX2siiERxaQ523UHc+tOLceG/UgcGMFnOPB/r4npNibg5AguJTvUYy+aqk+E/Y84aEvPfpn5a7fQBMCwd6VqJBxpVfS79Rv6K5erwKB223nzQa9CZhtPjlTTXpeHNkfgnGoOFMK8b8fIslpQ67GmjPUsZBqy+taPU22BgEAAQA= @unknown
+INFO         |   androidboot.qemu.avd_name=SmartRes_Second
+INFO         |   androidboot.qemu.camera_hq_edge_processing=0
+INFO         |   androidboot.qemu.camera_protocol_ver=1
+INFO         |   androidboot.qemu.cpuvulkan.version=4206592
+INFO         |   androidboot.qemu.gltransport.drawFlushInterval=800
+INFO         |   androidboot.qemu.gltransport.name=pipe
+INFO         |   androidboot.qemu.hwcodec.avcdec=2
+INFO         |   androidboot.qemu.hwcodec.hevcdec=2
+INFO         |   androidboot.qemu.hwcodec.vpxdec=2
+INFO         |   androidboot.qemu.settings.system.screen_off_timeout=2147483647
+INFO         |   androidboot.qemu.skin=720x1280
+INFO         |   androidboot.qemu.virtiowifi=1
+INFO         |   androidboot.qemu.vsync=60
+INFO         |   androidboot.serialno=EMULATOR37X2X12X0
+INFO         |   androidboot.vbmeta.digest=43d61dbc053c8dbf3adaff951e5bdfcf174ece9dd24ffe8e6120f951cb412b2a
+INFO         |   androidboot.vbmeta.hash_alg=sha256
+INFO         |   androidboot.vbmeta.size=6784
+INFO         |   androidboot.veritymode=enforcing
+WHPX on Windows 10.0.26200 detected.
+Windows Hypervisor Platform accelerator is operational
+INFO         | Activated packet streamer for bluetooth emulation
+INFO         | Activated packet streamer for uwb emulation
+INFO         | Monitoring duration of emulator setup.
+INFO         | Successfully initialized netsim WiFi
+INFO         | Setting display: 0 configuration to: 720x1280, dpi: 320x320 
+INFO         | setDisplayActiveConfig: id:0, 720x1280
+INFO         | Checking system compatibility:
+INFO         |   Checking: hasCompatibleHypervisor
+INFO         |      Ok: Hypervisor compatibility to run avd: `SmartRes_Second` are met
+INFO         |   Checking: hasSufficientSystem
+INFO         |      Ok: System requirements to run avd: `SmartRes_Second` are met
+INFO         |   Checking: hasSufficientHwGpu
+INFO         |      Ok: Hardware GPU requirements to run avd: `SmartRes_Second` are passed
+INFO         |   Checking: hasSufficientDiskSpace
+INFO         |      Ok: Disk space requirements to run avd: `SmartRes_Second` are met
+WARNING      | getEnvironmentConfig: No environment config is provided
+INFO         | getEnvironmentConfig: Using default virtual scene mode for the environment.
+INFO         | getEnvironmentConfig: Using default configuration for mode mesh3d for the environment.
+INFO         | Initializing a scene with mode: mesh3d, argument: Toren1BD.obj
+USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+INFO         | GPU Vendor=[Google (NVIDIA Corporation)]
+INFO         | GPU Renderer=[Android Emulator OpenGL ES Translator (NVIDIA GeForce RTX 4050 Laptop GPU/PCIe/SSE2)]
+INFO         | GPU Version=[OpenGL ES 3.0 (4.5.0 NVIDIA 591.66)]
+INFO         | Warning: QMetaObject::connectSlotsByName: No matching signal for on_rgbcSensorValueWidget_valueChanged() (:0, )
+INFO         | Warning: QMetaObject::connectSlotsByName: No matching signal for on_posture_valueChanged(int) (:0, )
+INFO         | TouchpadHolder: registering via hw_xr_led agent for instance=0000021E04710600
+INFO         | Warning: QObject::connect: Cannot queue arguments of type 'std::vector<android::emulation::control::SnapshotInfo>'
+(Make sure 'std::vector<android::emulation::control::SnapshotInfo>' is registered using qRegisterMetaType().) (:0, )
+INFO         | AVD supportsNativeGLES=1, supportsGuestAngle=1
+INFO         | Guest Angle is still unstable for API > 35.
+INFO         | Created extended window in 492.692ms
+WARNING      | adb command 'C:\Users\nhung\AppData\Local\Android\Sdk\platform-tools\adb.exe -s emulator-5556 shell getprop sys.boot_completed ' failed: 'adb.exe: device offline'
+WARNING      | adb command 'C:\Users\nhung\AppData\Local\Android\Sdk\platform-tools\adb.exe -s emulator-5556 shell getprop sys.boot_completed ' failed: 'adb.exe: device offline'
+INFO         | Critical: UpdateLayeredWindowIndirect failed for ptDst=(163, 163), size=(375x26), dirty=(375x26 0, 0) (A device attached to the system is not functioning.) (:0, )
+WARNING      | adb command 'C:\Users\nhung\AppData\Local\Android\Sdk\platform-tools\adb.exe -s emulator-5556 shell getprop sys.boot_completed ' failed: 'adb.exe: device offline'
+INFO         | Boot completed in 38968 ms
+INFO         | Increasing screen off timeout, logcat buffer size to 2M.
+INFO         | IPv4 server found: 10.53.120.33
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | IPv4 server found: 10.53.120.33
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | IPv4 server found: 10.53.120.33
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: a000:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: b806:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 9017:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Ignore IPv6 address: 7023:ba25:1e02:0:a000:ba25:1e02:0
+INFO         | Critical: UpdateLayeredWindowIndirect failed for ptDst=(163, 163), size=(375x26), dirty=(375x26 0, 0) (A device attached to the system is not functioning.) (:0, )
+WARNING      | adb command 'C:\Users\nhung\AppData\Local\Android\Sdk\platform-tools\adb.exe -s emulator-5556 shell dumpsys package com.google.android.gms ' failed: 'Activity Resolver Table:
+  Full MIME Types:
+      vnd.android.cursor.item/com.google.android.gms.matchstick.phone:
+        5a75fd7 com.google.android.gms/.matchstick.call.ContactsVideoActionActivity filter ec180c4
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone"
+        937bbad com.google.android.gms/.matchstick.call.ContactsPrivilegedVideoActionActivity filter cb7cee2
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone"
+      application/vnd.apple.pkpasses:
+        6fb5a4f com.google.android.gms/.pay.deeplink.AliasSavePkPassActivity filter 6a3b5dc
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "content"
+          StaticType: "application/vnd.apple.pkpass"
+          StaticType: "application/vnd.apple.pkpasses"
+          StaticType: "application/octet-stream"
+      */*:
+        26e10ec com.google.android.gms/.nearby.sharing.send.SendActivity filter 48d4cb5
+          Action: "android.intent.action.SEND"
+          Action: "android.intent.action.SEND_MULTIPLE"
+          Action: "com.google.android.gms.SHARE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        1277bdd com.google.android.gms/.nearby.sharing.ReceiveSurfaceActivity filter f7b4352
+          Action: "com.google.android.gms.RECEIVE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        da4f8d9 com.google.android.gms/.nearby.sharing.receive.ReceiveActivity filter 3e6429e
+          Action: "com.google.android.gms.RECEIVE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7819a38 com.google.android.gms/.nearby.sharing.migration.TransparentTrampolineActivity filter e7bea11
+          Action: "com.google.android.gms.RECEIVE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7819a38 com.google.android.gms/.nearby.sharing.migration.TransparentTrampolineActivity filter 3f5177
+          Action: "com.google.android.gms.SHARE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+      application/vnd.google.wallet.walletable-resource+image:
+        945a6e5 com.google.android.gms/.pay.deeplink.AliasProcessWalletableResourceActivity filter 5a005ba
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "walletable-resource"
+          StaticType: "application/vnd.google.wallet.walletable-resource+image"
+      text/plain:
+        9370888 com.google.android.gms/.plus.sharebox.ShareBoxActivity filter 2384221
+          Action: "com.google.android.gms.plus.action.SHARE_GOOGLE"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "text/plain"
+      application/octet-stream:
+        6fb5a4f com.google.android.gms/.pay.deeplink.AliasSavePkPassActivity filter 6a3b5dc
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "content"
+          StaticType: "application/vnd.apple.pkpass"
+          StaticType: "application/vnd.apple.pkpasses"
+          StaticType: "application/octet-stream"
+      vnd.android.cursor.item/com.google.android.gms.matchstick.phone.audio:
+        182273 com.google.android.gms/.matchstick.call.ContactsAudioActionActivity filter cb7e530
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone.audio"
+        54165a9 com.google.android.gms/.matchstick.call.ContactsPrivilegedAudioActionActivity filter 387f72e
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone.audio"
+      application/vnd.google.wallet.walletable-resource+barcode:
+        ebd4c6b com.google.android.gms/.pay.deeplink.AliasProcessWalletableBarcodeResourceActivity filter 9a453c8
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "walletable-resource"
+          StaticType: "application/vnd.google.wallet.walletable-resource+barcode"
+      application/vnd.apple.pkpass:
+        6fb5a4f com.google.android.gms/.pay.deeplink.AliasSavePkPassActivity filter 6a3b5dc
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "content"
+          StaticType: "application/vnd.apple.pkpass"
+          StaticType: "application/vnd.apple.pkpasses"
+          StaticType: "application/octet-stream"
+
+  Base MIME Types:
+      vnd.android.cursor.item:
+        5a75fd7 com.google.android.gms/.matchstick.call.ContactsVideoActionActivity filter ec180c4
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone"
+        937bbad com.google.android.gms/.matchstick.call.ContactsPrivilegedVideoActionActivity filter cb7cee2
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone"
+        182273 com.google.android.gms/.matchstick.call.ContactsAudioActionActivity filter cb7e530
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone.audio"
+        54165a9 com.google.android.gms/.matchstick.call.ContactsPrivilegedAudioActionActivity filter 387f72e
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "vnd.android.cursor.item/com.google.android.gms.matchstick.phone.audio"
+      text:
+        9370888 com.google.android.gms/.plus.sharebox.ShareBoxActivity filter 2384221
+          Action: "com.google.android.gms.plus.action.SHARE_GOOGLE"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "text/plain"
+      application:
+        6fb5a4f com.google.android.gms/.pay.deeplink.AliasSavePkPassActivity filter 6a3b5dc
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "content"
+          StaticType: "application/vnd.apple.pkpass"
+          StaticType: "application/vnd.apple.pkpasses"
+          StaticType: "application/octet-stream"
+        6fb5a4f com.google.android.gms/.pay.deeplink.AliasSavePkPassActivity filter 6a3b5dc
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "content"
+          StaticType: "application/vnd.apple.pkpass"
+          StaticType: "application/vnd.apple.pkpasses"
+          StaticType: "application/octet-stream"
+        6fb5a4f com.google.android.gms/.pay.deeplink.AliasSavePkPassActivity filter 6a3b5dc
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "content"
+          StaticType: "application/vnd.apple.pkpass"
+          StaticType: "application/vnd.apple.pkpasses"
+          StaticType: "application/octet-stream"
+        945a6e5 com.google.android.gms/.pay.deeplink.AliasProcessWalletableResourceActivity filter 5a005ba
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "walletable-resource"
+          StaticType: "application/vnd.google.wallet.walletable-resource+image"
+        ebd4c6b com.google.android.gms/.pay.deeplink.AliasProcessWalletableBarcodeResourceActivity filter 9a453c8
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "walletable-resource"
+          StaticType: "application/vnd.google.wallet.walletable-resource+barcode"
+
+  Wild MIME Types:
+      *:
+        26e10ec com.google.android.gms/.nearby.sharing.send.SendActivity filter 48d4cb5
+          Action: "android.intent.action.SEND"
+          Action: "android.intent.action.SEND_MULTIPLE"
+          Action: "com.google.android.gms.SHARE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        1277bdd com.google.android.gms/.nearby.sharing.ReceiveSurfaceActivity filter f7b4352
+          Action: "com.google.android.gms.RECEIVE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        da4f8d9 com.google.android.gms/.nearby.sharing.receive.ReceiveActivity filter 3e6429e
+          Action: "com.google.android.gms.RECEIVE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7819a38 com.google.android.gms/.nearby.sharing.migration.TransparentTrampolineActivity filter e7bea11
+          Action: "com.google.android.gms.RECEIVE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+        7819a38 com.google.android.gms/.nearby.sharing.migration.TransparentTrampolineActivity filter 3f5177
+          Action: "com.google.android.gms.SHARE_NEARBY"
+          Category: "android.intent.category.DEFAULT"
+          StaticType: "*"
+          mPriority=0, mOrder=0, mHasStaticPartialTypes=true, mHasDynamicPartialTypes=false
+
+  Schemes:
+      walletable-resource:
+        945a6e5 com.google.android.gms/.pay.deeplink.AliasProcessWalletableResourceActivity filter 5a005ba
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "walletable-resource"
+          StaticType: "application/vnd.google.wallet.walletable-resource+image"
+        ebd4c6b com.google.android.gms/.pay.deeplink.AliasProcessWalletableBarcodeResourceActivity filter 9a453c8
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "walletable-resource"
+          StaticType: "application/vnd.google.wallet.walletable-resource+barcode"
+      mobiledataplan:
+        5ce8e63 com.google.android.gms/.mobiledataplan.ui.MobileDataPlanSettingsActivity filter f5f43ea
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "mobiledataplan"
+          Authority: "mobiledataplan.gms.android.google.com": -1
+          Path: "PatternMatcher{LITERAL: /startui}"
+        5ce8e63 com.google.android.gms/.mobiledataplan.ui.MobileDataPlanSettingsActivity filter 33d66db
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "mobiledataplan"
+          Authority: "mobiledataplan.gms.android.google.com": -1
+          Path: "PatternMatcher{PREFIX: /esim/}"
+        eddb578 com.google.android.gms/.mobiledataplan.ui.MobileDataPlanDetailActivity filter 1e5b4b6
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "mobiledataplan"
+          Authority: "mobiledataplan.gms.android.google.com": -1
+          Path: "PatternMatcher{LITERAL: /esimcarrieraccount}"
+      google-orchestration-gcore:
+        b09e641 com.google.android.gms/.wallet.redirect.FinishAndroidAppRedirectProxyActivity filter ea507e6
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "google-orchestration-gcore"
+          Authority: "return": -1
+      google.authzen:
+        1127a09 com.google.android.gms/.auth.authzen.AuthzenDeeplinkHandlerActivity filter 202e40e
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          C
