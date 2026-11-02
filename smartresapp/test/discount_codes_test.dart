@@ -55,9 +55,20 @@ void main() {
       );
       await tester.ensureVisible(find.byKey(const Key('promo-value')));
       await tester.enterText(find.byKey(const Key('promo-value')), '20.00');
-      await tester.ensureVisible(find.byKey(const Key('discount-preview')));
+      expect(find.text('Sinh mã tự động'), findsNothing);
+      expect(find.text('Tự nhập mã'), findsNothing);
+      await tester.ensureVisible(
+        find.byKey(const Key('discount-suggest-code')),
+      );
+      await tester.tap(find.byKey(const Key('discount-suggest-code')));
       await tester.pumpAndSettle();
-      expect(find.text('Mã dự kiến: TAKH10020'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(find.byKey(const Key('discount-code')))
+            .controller!
+            .text,
+        'TAKH10020',
+      );
       await tester.tap(find.text('Lưu mã giảm giá'));
       await tester.pumpAndSettle();
       expect(saved!['codeMode'], 'auto');
@@ -72,14 +83,8 @@ void main() {
       expect(saved!.containsKey('discountValue'), false);
       await tester.tap(find.text('Sửa mã giảm giá'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Tự nhập mã'));
-      await tester.tap(find.text('Tự nhập mã'));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(
-        find.widgetWithText(TextFormField, 'Mã giảm giá'),
-      );
       await tester.enterText(
-        find.widgetWithText(TextFormField, 'Mã giảm giá'),
+        find.byKey(const Key('discount-code')),
         'khach-vip',
       );
       await tester.tap(find.text('Lưu mã giảm giá'));

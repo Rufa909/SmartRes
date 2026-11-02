@@ -493,48 +493,53 @@ class _PromotionFormState extends State<PromotionFormDialog> {
                           : null;
                     },
                   ),
-                  RadioGroup<String>(
-                    groupValue: codeMode,
-                    onChanged: busy
-                        ? (_) {}
-                        : (v) => setState(() => codeMode = v!),
-                    child: const Column(
-                      children: [
-                        RadioListTile<String>(
-                          value: 'auto',
-                          title: Text('Sinh mã tự động'),
+                  const SizedBox(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          key: const Key('discount-code'),
+                          controller: code,
+                          enabled: !busy,
+                          maxLength: 64,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: const InputDecoration(
+                            labelText: 'Mã voucher',
+                          ),
+                          onChanged: (_) => codeMode = 'manual',
+                          validator: (v) =>
+                              RegExp(r'^[A-Z0-9_-]{1,64}$')
+                                  .hasMatch((v ?? '').trim().toUpperCase())
+                              ? null
+                              : 'Nhập mã hoặc bấm Gợi ý.',
                         ),
-                        RadioListTile<String>(
-                          value: 'manual',
-                          title: Text('Tự nhập mã'),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: OutlinedButton.icon(
+                          key: const Key('discount-suggest-code'),
+                          onPressed: busy
+                              ? null
+                              : () => setState(() {
+                                  code.text = generatedCode;
+                                  codeMode = 'auto';
+                                }),
+                          icon: const Icon(Icons.auto_awesome_outlined),
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          label: const Text('Gợi ý'),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  if (codeMode == 'manual')
-                    TextFormField(
-                      controller: code,
-                      enabled: !busy,
-                      maxLength: 64,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Mã giảm giá',
-                      ),
-                      validator: (v) =>
-                          RegExp(r'^[A-Z0-9_-]{1,64}$')
-                              .hasMatch((v ?? '').trim().toUpperCase())
-                          ? null
-                          : 'Chỉ nhập chữ không dấu, số, _ hoặc -.',
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        'Mã dự kiến: $generatedCode',
-                        key: const Key('discount-preview'),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
                 ],
                 const Text(
                   'Áp dụng: Toàn hóa đơn',

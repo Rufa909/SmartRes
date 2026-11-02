@@ -395,4 +395,53 @@ WARNING      | adb command 'C:\Users\nhung\AppData\Local\Android\Sdk\platform-to
         1127a09 com.google.android.gms/.auth.authzen.AuthzenDeeplinkHandlerActivity filter 202e40e
           Action: "android.intent.action.VIEW"
           Category: "android.intent.category.DEFAULT"
-          C
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "google.authzen"
+      growth:
+        1e26b0a com.google.android.gms/.growth.featuredrops.activity.FeatureDropsActivity filter e720198
+          Action: "android.intent.action.VIEW"
+          Category: "android.intent.category.DEFAULT"
+          Category: "android.intent.category.BROWSABLE"
+          Scheme: "growth"
+          Authority: "featuredrops": -1
+          AutoVerify=true
+      intent:
+        713f405 com.google.android.gms/.auth.uiflows.common.UnpackingRedirectActivity filter 1002e8b
+          Action: "com.google.android.gms.ui.UNPACKING_REDIRECT"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "intent"
+          Authority: "com.google.android.gms.auth.uiflows.common": -1
+      policy:
+        3370e1a com.google.android.gms/.kids.AllSettingsActivityBad filter 6d91d4b
+          Action: "android.settings.MANAGE_SUPERVISOR_RESTRICTED_SETTING"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "policy"
+          Path: "PatternMatcher{LITERAL: biometric}"
+        4608328 com.google.android.gms/.kids.BiometricSettingsActivity filter dfe3841
+          Action: "android.settings.MANAGE_SUPERVISOR_RESTRICTED_SETTING"
+          Category: "android.intent.category.DEFAULT"
+          Scheme: "policy"
+          Authority: "": -1 WILD
+          Path: "PatternMatcher{PREFIX: /biometric}"
+        da7f1e6 com.google.android.gms/.kids.Blo
+INFO         | Warning: Retrying to obtain clipboard. (:0, )
+INFO         | Warning: Retrying to obtain clipboard. (:0, )
+INFO         | Warning: Retrying to obtain clipboard. (:0, )
+ERROR        | Failed to import external memory object with error: 1282
+ERROR        | Failed to import memory to ColorBufferGl:407
+ERROR        | adb protocol fault (couldn't read status length)
+ERROR        | DisplaySurfaceGlContextHelper context was preempted by others, current=0000000000000003, needed=0000000000000003, thread=0000021E74B7A438
+ERROR        | DisplaySurfaceGlContextHelper context was preempted by others, current=0000000000000003, needed=0000000000000003, thread=0000021E299B20E8
+ERROR        | Failed to restore previous context: 12297
+INFO         | Warning: Retrying to obtain clipboard. (:0, )
+INFO         | Wait for emulator (pid 32228) 20 seconds to shutdown gracefully before kill;you can set environment variable ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL(in seconds) to change the default value (20 seconds)
+
+INFO         | Saving with gfxstream=1
+INFO         | Saving snapshot 'default_boot' took 1555 ms
+INFO         | GPU Vendor=[Google (NVIDIA Corporation)]
+INFO         | GPU Renderer=[Android Emulator OpenGL ES Translator (NVIDIA GeForce RTX 4050 Laptop GPU/PCIe/SSE2)]
+INFO         | GPU Version=[OpenGL ES 3.0 (4.5.0 NVIDIA 591.66)]
+WARNING      | Emulator client has not yet been configured.. Call configure me first!
+INFO         | removeScene: scene=0x21e74969ab0
+INFO         | removeAll
+WARNING      | Netsim Wifi dns:///localhost:64333 is gone due to Stream removed (CANCELLED)
