@@ -38,13 +38,21 @@ try {
     await c.execute('INSERT IGNORE INTO categories(name,sort_order) VALUES (?,?)', [name,index]);
   }
   const dishes = [
-    ['Cơm chiên hải sản','Món chính','🍚',45000,1], ['Sườn nướng mật ong','Món chính','🍖',89000,1],
-    ['Gỏi cuốn tôm','Khai vị','🥗',35000,1], ['Khoai tây chiên','Khai vị','🍟',30000,1],
-    ['Trà đào cam sả','Đồ uống','🍑',25000,1], ['Lẩu hải sản','Món chính','🍲',250000,0],
+    ['Cơm chiên hải sản','Món chính','🍚',45000,1,'Cơm chiên tơi hạt cùng tôm, mực và rau củ, thơm nóng vừa vị.','/menu/com-chien-hai-san.webp'],
+    ['Sườn nướng mật ong','Món chính','🍖',89000,1,'Sườn nướng mềm mọng, phủ sốt mật ong óng nhẹ và thơm mùi than nướng.','/menu/suon-nuong-mat-ong.webp'],
+    ['Gỏi cuốn tôm','Khai vị','🥗',35000,1,'Tôm tươi, bún và rau thơm cuốn bánh tráng, dùng cùng sốt đậu phộng đậm vị.','/menu/goi-cuon-tom.webp'],
+    ['Khoai tây chiên','Khai vị','🍟',30000,1,'Khoai chiên vàng giòn bên ngoài, mềm bùi bên trong, ăn kèm tương cà.','/menu/khoai-tay-chien.webp'],
+    ['Trà đào cam sả','Đồ uống','🍑',25000,1,'Trà đào thanh mát với cam tươi và sả, cân bằng vị chua ngọt dễ uống.','/menu/tra-dao-cam-sa.webp'],
+    ['Lẩu hải sản','Món chính','🍲',250000,0,'Lẩu hải sản nóng hổi với tôm, mực và rau tươi dùng chung tại bàn.',null],
   ];
-  for (const [name,category,emoji,price,available] of dishes) {
-    await c.execute(`INSERT IGNORE INTO menu_items(name,category_id,emoji,price,is_available)
-      SELECT ?,id,?,?,? FROM categories WHERE name=?`, [name,emoji,price,available,category]);
+  for (const [name,category,emoji,price,available,description,imageUrl] of dishes) {
+    await c.execute(`INSERT INTO menu_items(name,category_id,emoji,price,is_available,description,image_url)
+      SELECT ?,id,?,?,?,?,? FROM categories WHERE name=?
+      ON DUPLICATE KEY UPDATE
+        emoji=IF(emoji IS NULL OR emoji='' OR emoji='?',VALUES(emoji),emoji),
+        description=IF(description IS NULL OR description='',VALUES(description),description),
+        image_url=IF(image_url IS NULL OR image_url='',VALUES(image_url),image_url)`,
+      [name,emoji,price,available,description,imageUrl,category]);
   }
   await c.commit();
   console.log('Database smartres_staff sẵn sàng: 8 bàn và 6 món khởi tạo. Không tạo đơn hàng giả.');

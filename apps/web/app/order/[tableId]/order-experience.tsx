@@ -8,11 +8,14 @@ import {
   Clock3,
   ConciergeBell,
   Minus,
+  MessageCircle,
   Plus,
   ReceiptText,
   Search,
   ShoppingBag,
   Sparkles,
+  Star,
+  TrendingUp,
   UtensilsCrossed,
   X
 } from "lucide-react";
@@ -47,6 +50,29 @@ const extraPrices: Record<string, number> = {};
 // Gọi cùng tên miền với trang web; Next.js sẽ proxy tới Customer API ở máy chủ.
 const apiBaseUrl = "/api/customer";
 
+const localMenuVisuals: Record<string, { imageUrl: string; description: string }> = {
+  "Gỏi cuốn tôm": {
+    imageUrl: "/menu/goi-cuon-tom.webp",
+    description: "Tôm tươi, bún và rau thơm cuốn bánh tráng, dùng cùng sốt đậu phộng đậm vị."
+  },
+  "Khoai tây chiên": {
+    imageUrl: "/menu/khoai-tay-chien.webp",
+    description: "Khoai chiên vàng giòn bên ngoài, mềm bùi bên trong, ăn kèm tương cà."
+  },
+  "Cơm chiên hải sản": {
+    imageUrl: "/menu/com-chien-hai-san.webp",
+    description: "Cơm chiên tơi hạt cùng tôm, mực và rau củ, thơm nóng vừa vị."
+  },
+  "Sườn nướng mật ong": {
+    imageUrl: "/menu/suon-nuong-mat-ong.webp",
+    description: "Sườn nướng mềm mọng, phủ sốt mật ong óng nhẹ và thơm mùi than nướng."
+  },
+  "Trà đào cam sả": {
+    imageUrl: "/menu/tra-dao-cam-sa.webp",
+    description: "Trà đào thanh mát với cam tươi và sả, cân bằng vị chua ngọt dễ uống."
+  }
+};
+
 async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = 10000) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -66,17 +92,24 @@ function formatTable(tableId: string) {
   return match ? `Bàn ${match[1].padStart(2, "0")}` : tableId.replaceAll("-", " ");
 }
 
-function FoodArtwork({ item, large = false }: { item: MenuItem; large?: boolean }) {
+function FoodArtwork({ item, variant = "thumb" }: { item: MenuItem; variant?: "thumb" | "card" | "detail" }) {
   const [failed,setFailed]=useState(false);
   useEffect(()=>setFailed(false),[item.imageUrl]);
+  const sizeClass = variant === "detail"
+    ? "h-64 w-full sm:h-80"
+    : variant === "card"
+      ? "h-32 w-32 sm:h-36 sm:w-40 md:h-52 md:w-full"
+      : "h-20 w-20";
   return (
     <div
-      className={`relative grid shrink-0 place-items-center overflow-hidden rounded-[22px] ${large ? "h-52 w-full sm:h-64" : "h-24 w-24"}`}
+      className={`relative grid shrink-0 place-items-center overflow-hidden rounded-[20px] bg-stone-100 ${sizeClass}`}
       style={{ background: item.color }}
-      aria-hidden="true"
     >
-      {item.imageUrl && !failed ? <img src={item.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)} className="absolute inset-0 h-full w-full object-cover" /> : <div className={`${large ? "text-8xl" : "text-5xl"} drop-shadow-sm`}>{item.symbol}</div>}
-      <span className="absolute bottom-3 right-3 h-3 w-3 rounded-full bg-emerald-500 ring-4 ring-white" />
+      {item.imageUrl && !failed ? (
+        <img src={item.imageUrl} alt={item.name} loading="lazy" referrerPolicy="no-referrer" onError={()=>setFailed(true)} className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.04]" />
+      ) : (
+        <div className={`${variant === "detail" ? "text-8xl" : "text-5xl"} drop-shadow-sm`}>{item.symbol}</div>
+      )}
     </div>
   );
 }
@@ -150,16 +183,19 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
         const data = await response.json() as { items: Array<{ id: number; name: string; description: string | null; price: number | string; category: string; emoji?: string | null; imageUrl?: string | null }> };
         if (!cancelled) {
           const colors = ["#fff0eb", "#fff7da", "#edf8e8", "#fff0da", "#f3ebe6", "#f0edff"];
-          setLiveMenuItems(data.items.map((item, index) => ({
-            id: item.id,
-            name: item.name,
-            description: item.description || "Món ăn được chuẩn bị tươi ngon tại nhà hàng.",
-            price: Number(item.price),
-            category: item.category,
-            color: colors[index % colors.length],
-            symbol: item.emoji || "🍽️",
-            imageUrl:item.imageUrl,
-          })));
+          setLiveMenuItems(data.items.map((item, index) => {
+            const localVisual = localMenuVisuals[item.name];
+            return {
+              id: item.id,
+              name: item.name,
+              description: item.description || localVisual?.description || "Món ăn được chuẩn bị tươi ngon tại nhà hàng.",
+              price: Number(item.price),
+              category: item.category,
+              color: colors[index % colors.length],
+              symbol: item.emoji && item.emoji !== "?" ? item.emoji : "🍽️",
+              imageUrl: item.imageUrl || localVisual?.imageUrl,
+            };
+          }));
           setCategory(current=>current==='Tất cả' || data.items.some(i=>i.category===current)?current:'Tất cả');
           setMenuError(null);
         }
@@ -190,6 +226,9 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
       return categoryMatches && queryMatches;
     });
   }, [category, liveMenuItems, query]);
+
+  // Khu này dùng dữ liệu menu hiện có. Sau này thay bằng thứ hạng bán chạy từ API báo cáo.
+  const spotlightItems = useMemo(() => liveMenuItems.slice(0, 3), [liveMenuItems]);
 
   const cartCount = cart.reduce((sum, cartItem) => sum + cartItem.quantity, 0);
   const subtotal = cart.reduce((sum, cartItem) => sum + cartItem.unitPrice * cartItem.quantity, 0);
@@ -304,14 +343,27 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
           </header>
 
           <div className="mx-auto max-w-5xl px-4 py-5 sm:px-7 xl:px-8 xl:py-7">
-            <section className="relative overflow-hidden rounded-[28px] bg-slate-950 px-5 py-6 text-white sm:px-8 sm:py-8">
-              <div className="relative z-10 max-w-xl">
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white/80"><Sparkles size={14} /> Gợi ý hôm nay</span>
-                <h1 className="mt-4 text-2xl font-black leading-tight sm:text-4xl">Món ngon sẵn sàng<br className="hidden sm:block" /> cho bàn của bạn</h1>
-                <p className="mt-3 max-w-md text-sm leading-6 text-white/60">Chọn món, tùy chỉnh khẩu phần và gửi thẳng yêu cầu đến bếp chỉ trong vài bước.</p>
+            <section className="relative min-h-[230px] overflow-hidden rounded-[28px] bg-[#201b18] text-white sm:min-h-[280px]">
+              {spotlightItems[0]?.imageUrl && (
+                <img src={spotlightItems[0].imageUrl} alt="" className="absolute inset-y-0 right-0 h-full w-[64%] object-cover sm:w-[56%]" />
+              )}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#201b18] via-[#201b18]/95 to-[#201b18]/10" />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#201b18]/80 via-transparent to-transparent sm:hidden" />
+              <div className="relative z-10 flex min-h-[230px] max-w-[72%] flex-col justify-center px-5 py-7 sm:min-h-[280px] sm:max-w-[58%] sm:px-9">
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-amber-200 backdrop-blur"><Sparkles size={14} /> Gợi ý hôm nay</span>
+                <h1 className="mt-4 text-2xl font-black leading-[1.08] sm:text-4xl">Bữa ngon bắt đầu từ món bạn thích</h1>
+                <p className="mt-3 max-w-md text-xs leading-5 text-white/70 sm:text-sm sm:leading-6">Xem ảnh món thật, chọn khẩu phần và gửi yêu cầu trực tiếp đến bếp.</p>
+                <button type="button" onClick={() => document.getElementById("menu-list")?.scrollIntoView({ behavior: "smooth" })} className="mt-5 w-fit rounded-full bg-coral px-4 py-2.5 text-xs font-black shadow-lg shadow-coral/25">Xem thực đơn</button>
               </div>
-              <div className="absolute -bottom-16 -right-10 h-52 w-52 rounded-full bg-coral/80 blur-2xl" />
-              <div className="absolute right-8 top-8 hidden text-8xl sm:block">🍲</div>
+            </section>
+
+            <section className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 p-3.5 sm:p-4" aria-label="Tính năng sắp ra mắt">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white text-coral shadow-sm"><MessageCircle size={21} /></div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black text-slate-900">Trợ lý chọn món</p><span className="rounded-full bg-amber-200/70 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-900">Sắp ra mắt</span></div>
+                <p className="mt-0.5 text-xs leading-5 text-slate-600">Gợi ý món theo khẩu vị, số người và món đang có trong giỏ.</p>
+              </div>
+              <Sparkles className="hidden shrink-0 text-amber-500 sm:block" size={20} />
             </section>
 
             {menuError && <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">{menuError}</p>}
@@ -339,7 +391,32 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
               ))}
             </div>
 
-            <div className="mt-7 flex items-end justify-between">
+            {category === "Tất cả" && !query && spotlightItems.length > 0 && (
+              <section className="mt-7" aria-labelledby="spotlight-title">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-600"><TrendingUp size={14} /> Gợi ý nổi bật</p>
+                    <h2 id="spotlight-title" className="mt-1 text-xl font-black sm:text-2xl">Món đáng thử hôm nay</h2>
+                  </div>
+                  <span className="text-xs text-slate-400">Vuốt để xem</span>
+                </div>
+                <div className="no-scrollbar mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
+                  {spotlightItems.map((item, index) => (
+                    <button key={item.id} type="button" onClick={() => openDetail(item)} className="group relative h-44 w-[78%] shrink-0 snap-start overflow-hidden rounded-[22px] bg-slate-900 text-left shadow-sm sm:w-72" aria-label={`Xem gợi ý ${item.name}`}>
+                      {item.imageUrl && <img src={item.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" />}
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/15 to-transparent" />
+                      <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-black text-slate-900 backdrop-blur"><Star size={11} className="fill-amber-400 text-amber-400" /> #{index + 1}</div>
+                      <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+                        <p className="text-base font-black leading-tight">{item.name}</p>
+                        <p className="mt-1 text-sm font-bold text-amber-200">{formatPrice(item.price)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <div id="menu-list" className="mt-7 flex scroll-mt-24 items-end justify-between">
               <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-coral">Khám phá</p><h2 className="mt-1 text-2xl font-black">{category === "Tất cả" ? "Món nổi bật" : category}</h2></div>
               <span className="text-sm text-slate-400">{filteredItems.length} món</span>
             </div>
@@ -347,17 +424,17 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
             {filteredItems.length ? (
               <div className="mt-4 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                 {filteredItems.map((item) => (
-                  <article key={item.id} className="group flex gap-4 rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-coral/20 hover:shadow-xl hover:shadow-slate-200/60 md:flex-col">
-                    <button onClick={() => openDetail(item)} className="text-left md:w-full" aria-label={`Xem ${item.name}`}><FoodArtwork item={item} large /></button>
-                    <div className="flex min-w-0 flex-1 flex-col px-0 py-1 md:px-2 md:pb-2">
+                  <article key={item.id} className="group flex min-h-40 gap-3 rounded-[24px] border border-slate-200/90 bg-white p-3 shadow-sm transition hover:-translate-y-0.5 hover:border-coral/20 hover:shadow-xl hover:shadow-slate-200/60 sm:gap-4 md:flex-col">
+                    <button onClick={() => openDetail(item)} className="shrink-0 text-left md:w-full" aria-label={`Xem ${item.name}`}><FoodArtwork item={item} variant="card" /></button>
+                    <div className="flex min-w-0 flex-1 flex-col py-0.5 md:px-2 md:pb-2">
                       <div className="flex items-start justify-between gap-2">
-                        <button onClick={() => openDetail(item)} className="text-left text-base font-black leading-5 hover:text-coral">{item.name}</button>
+                        <button onClick={() => openDetail(item)} className="text-left text-[15px] font-black leading-5 hover:text-coral sm:text-base">{item.name}</button>
                         {item.badge && <span className="hidden shrink-0 rounded-full bg-coral/10 px-2.5 py-1 text-[10px] font-bold text-coral sm:inline">{item.badge}</span>}
                       </div>
-                      <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-500">{item.description}</p>
+                      <p className="mt-1.5 line-clamp-3 text-[11px] leading-[1.55] text-slate-500 sm:text-xs sm:leading-5 md:line-clamp-2">{item.description}</p>
                       <div className="mt-auto flex items-center justify-between pt-3">
-                        <span className="text-base font-black text-coral">{formatPrice(item.price)}</span>
-                        <button onClick={() => openDetail(item)} className="grid h-9 w-9 place-items-center rounded-xl bg-coral text-white shadow-md shadow-coral/20 transition group-hover:scale-105" aria-label={`Thêm ${item.name}`}><Plus size={18} /></button>
+                        <span className="text-[15px] font-black text-coral sm:text-base">{formatPrice(item.price)}</span>
+                        <button onClick={() => openDetail(item)} className="grid h-9 w-9 place-items-center rounded-full bg-coral text-white shadow-md shadow-coral/20 transition group-hover:scale-105" aria-label={`Thêm ${item.name}`}><Plus size={18} /></button>
                       </div>
                     </div>
                   </article>
@@ -384,7 +461,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={`Tùy chọn ${selectedItem.name}`}>
           <div className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-t-[32px] bg-white shadow-2xl sm:rounded-[32px]">
             <div className="relative">
-              <FoodArtwork item={selectedItem} large />
+              <FoodArtwork item={selectedItem} variant="detail" />
               <button onClick={() => setSelectedItem(null)} className="absolute left-4 top-4 grid h-11 w-11 place-items-center rounded-full bg-white text-slate-900 shadow-lg" aria-label="Đóng"><ArrowLeft size={20} /></button>
             </div>
             <div className="p-5 sm:p-7">
