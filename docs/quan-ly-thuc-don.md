@@ -11,8 +11,8 @@ Luồng: **Đăng nhập quản lý → Quản lý thực đơn → tìm/lọc m
 1. Cập nhật APK hoặc hot restart Flutter, đăng nhập tài khoản vai trò `manager`. Tài khoản demo local hiện có: `quanly / QuanLy@123`.
 2. Chọn **Quản lý thực đơn**. Ô tìm kiếm hỗ trợ tiếng Việt không dấu; có lọc còn bán/hết món và danh mục.
 3. **Thêm danh mục**: bấm biểu tượng thư mục có dấu cộng, nhập tên và thứ tự. Để sửa, chọn danh mục trong bộ lọc rồi bấm biểu tượng bút bên cạnh.
-4. **Thêm món**: bấm nút Thêm món, nhập tên, danh mục, giá nguyên theo đồng, mô tả, biểu tượng và link ảnh tùy chọn, rồi bấm Lưu món. Nếu chưa có danh mục thì cần tạo danh mục trước.
-5. **Sửa món**: bấm biểu tượng bút trên thẻ món. Có thể sửa tên/giá/mô tả/danh mục/ảnh. Giá hợp lệ từ 0 đến 999.999.999 đồng, không dùng dấu chấm phân cách khi nhập.
+4. **Thêm món**: bấm nút Thêm món, nhập tên, danh mục, khẩu phần và giá, mô tả, biểu tượng và link ảnh tùy chọn, rồi bấm Lưu món. Thêm đúng các cỡ món đang bán (ví dụ Nhỏ và Vừa); có thể thêm tối đa 6 cỡ. Giá nhập bằng đồng, không dùng dấu chấm phân cách. Nếu chưa có danh mục thì cần tạo danh mục trước.
+5. **Sửa món**: bấm biểu tượng bút trên thẻ món. Có thể sửa tên/khẩu phần/giá/món thêm/mô tả/danh mục/ảnh. Xóa cỡ không phục vụ hoặc thêm cỡ mới; thêm món kèm (như phô mai/trứng) cùng phụ thu riêng. Menu khách chỉ hiện các lựa chọn đã cấu hình và API tự tính giá từ MySQL khi gửi đơn.
 6. **Hết món**: tắt công tắc Đang bán trên thẻ. Bật lại khi món sẵn sàng. Backend chặn gọi món đã hết kể cả khách/nhân viên còn đang giữ menu cũ.
 
 ## Ảnh và đồng bộ
@@ -43,7 +43,7 @@ Luồng: **Đăng nhập quản lý → Quản lý thực đơn → tìm/lọc m
 
 ## Database, chạy và cập nhật
 
-Migration bổ sung `menu_items.image_url`, version cho món/danh mục và bảng `menu_audit`. Chạy lặp an toàn, không xóa dữ liệu. API nhân viên và khách đều gọi migration khi khởi động. Máy hiện tại đã chạy migration thành công trên `smartres_staff`.
+Migration bổ sung `menu_items.image_url`, version cho món/danh mục, bảng `menu_audit` và bảng tùy chọn lưu khẩu phần/giá cùng món thêm/phụ thu theo món. Món cũ chưa có cỡ riêng được xem là một cỡ **Tiêu chuẩn** với giá hiện tại; món chưa cấu hình món thêm sẽ hiển thị ghi chú chưa có lựa chọn thêm. Không cần gửi file SQL hay nhập lại menu. Chạy lặp an toàn, không xóa dữ liệu. API nhân viên và khách đều gọi migration khi khởi động.
 
 Sau khi pull:
 

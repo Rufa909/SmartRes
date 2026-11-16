@@ -11,3 +11,12 @@ CREATE TABLE IF NOT EXISTS menu_audit (
  after_data JSON NOT NULL,
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS menu_item_options (
+ id BIGINT PRIMARY KEY AUTO_INCREMENT,
+ menu_item_id BIGINT NOT NULL,
+ group_name VARCHAR(100) NOT NULL,
+ option_name VARCHAR(100) NOT NULL,
+ extra_price DECIMAL(12,2) NOT NULL DEFAULT 0,
+ CONSTRAINT fk_options_menu_item FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE CASCADE,
+ INDEX idx_menu_item_options_group (menu_item_id,group_name,id)
+);

@@ -47,23 +47,21 @@ test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh to�
     const join=(tableCode='A01')=>request(customer,'/api/customer-sessions/join',{tableCode});
     const orderBody={tableCode:'A01',items:[{menuItemId:1,quantity:1}]};
     const order=(token?:string,body=orderBody)=>request(customer,'/api/orders',body,token);
-    assert.equal((await join()).status,403);
-    assert.equal((await order()).status,400); // bàn trống không được tự nhận bàn
-    const seat=await staffPost('tables/1/seat',{guests:2});
-    assert.equal(seat.status,200);
-    const session=(await seat.json()).customerSession;
-    assert.equal(session.joinCode,undefined);
-    assert.ok(session.sessionId);
+    const firstJoin=await join();
+    assert.equal(firstJoin.status,200); // quét QR tự mở bàn trống
+    const {token}=await firstJoin.json();
+    const [autoSeated]=await db.query<RowDataPacket[]>('SELECT status,guests FROM restaurant_tables WHERE id=1');
+    assert.equal(autoSeated[0].status,'dining');
+    assert.equal(autoSeated[0].guests,1);
     assert.equal((await order()).status,401);
     assert.equal((await order('a'.repeat(64))).status,401);
     assert.equal((await request(staff,'/api/staff/tables/1/seat',{guests:1},kitchenToken)).status,403);
     const joined=await join();
     assert.equal(joined.status,200);
-    const {token}=await joined.json();
-    const [stored]=await db.query<RowDataPacket[]>('SELECT token_hash FROM customer_session_tokens');
+    const [stored]=await db.query<RowDataPacket[]>('SELECT token_hash FROM customer_session_tokens WHERE token_hash=?',[hashCustomerToken(token)]);
     assert.equal(stored[0].token_hash,hashCustomerToken(token));
     assert.notEqual(stored[0].token_hash,token);
-    await staffPost('tables/2/seat',{guests:1});
+    const otherToken=(await (await join('A02')).json()).token;
     assert.equal((await order(token,{...orderBody,tableCode:'A02'})).status,401);
     assert.equal((await request(customer,'/api/orders/1/status',{status:'cancelled'},token,'PATCH')).status,404);
     assert.equal((await request(customer,'/api/payments/sepay/webhook',{referenceCode:'SR-test'},token)).status,404);
@@ -71,7 +69,6 @@ test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh to�
     const firstOrder=await order(token);
     assert.equal(firstOrder.status,201);
     const firstCode=(await firstOrder.json()).order.orderCode;
-    const otherToken=(await (await join('A02')).json()).token;
     assert.equal((await order(otherToken,{...orderBody,tableCode:'A02'})).status,201);
     const [cancelled]=await db.execute<import('mysql2/promise').ResultSetHeader>(`INSERT INTO orders(order_code,request_id,request_hash,table_id,total_amount,status)
       VALUES('CANCELLED-DETAIL','cancelled-detail',REPEAT('0',64),1,10000,'cancelled')`);
@@ -89,12 +86,10 @@ test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh to�
     assert.equal((await order(nextToken)).status,400); // chờ thanh toán không nhận thêm món
     await db.query("UPDATE order_items SET status='served',served_at=NOW()");
     assert.equal((await staffPost('tables/1/pay',{paymentMethod:'cash'})).status,200);
-    assert.equal((await join()).status,403);
     assert.equal((await request(customer,'/api/customer-sessions/check/A01',undefined,nextToken)).status,401);
-    // Lượt khách mới không thể dùng lại token hoặc đơn của lượt trước.
-    await staffPost('tables/1/seat',{guests:1});
-    assert.equal((await order(nextToken)).status,401);
+    // Quét lại sau thanh toán tự mở lượt mới, nhưng không khôi phục token cũ.
     const thirdToken=(await (await join()).json()).token;
+    assert.equal((await order(nextToken)).status,401);
     assert.equal((await request(customer,`/api/orders/${firstCode}/request-payment`,{},thirdToken)).status,400);
     // Phiên được lưu DB, vẫn có hiệu lực khi API khởi động lại.
     customer=await start(createApp(db).app);

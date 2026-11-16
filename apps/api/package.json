@@ -21,6 +21,7 @@
     "test:customer-security": "tsx --test scripts/customer-security.integration.test.ts",
     "test:menu": "tsx --test scripts/menu-management.integration.test.ts",
     "test:overview": "tsx --test scripts/management-overview.integration.test.ts",
+    "test:popular": "tsx --test scripts/popular-items.integration.test.ts",
     "test:users": "tsx --test scripts/user-management.integration.test.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",

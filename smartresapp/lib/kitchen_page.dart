@@ -378,6 +378,16 @@ class _KitchenPageState extends State<KitchenPage> {
                                               color: Color(0xFFB45309),
                                             ),
                                           ),
+                                        if ((item['customerNote'] as String? ?? '')
+                                            .trim()
+                                            .isNotEmpty)
+                                          Text(
+                                            'Ghi chú đơn hàng: ${item['customerNote']}',
+                                            style: const TextStyle(
+                                              color: Color(0xFFB45309),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
                                         Text(
                                           'Đơn ${item['orderCode']}',
                                           style: const TextStyle(

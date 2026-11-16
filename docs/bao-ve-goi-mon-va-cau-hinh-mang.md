@@ -5,10 +5,12 @@
 Theo yêu cầu cập nhật của người dùng, đã bỏ hoàn toàn bước nhập mã 6 số và nút cấp mã trong app nhân viên.
 
 1. Khách kết nối Wi-Fi nhà hàng, quét QR trên bàn và vào thẳng thực đơn.
-2. Web tự xin phiên gọi món từ backend. Chỉ bàn đã được nhân viên nhận khách (`dining`) mới được cấp phiên để gửi đơn. Bàn chưa mở vẫn xem/chọn món được, nhưng chưa gửi đơn được; sau khi nhân viên mở bàn, web tự thử kết nối lại mỗi 15 giây hoặc khách bấm Thử kết nối lại.
+2. Web tự xin phiên gọi món từ backend. Khi QR của bàn trống (`available`) được quét, backend tự chuyển bàn sang đang phục vụ, ghi nhận 1 khách mặc định và tạo lượt mới. Bàn đang chờ thanh toán hoặc tạm ngưng vẫn bị khóa. Nhân viên vẫn có thể nhận bàn trước nếu cần ghi đúng số khách.
 3. Mỗi điện thoại nhận token ngẫu nhiên riêng, gắn với đúng lượt bàn, không cần nhập hoặc nhìn thấy token.
 4. Chờ thanh toán thì không nhận thêm đơn. Thu ngân chốt hóa đơn sẽ thu hồi phiên và trả bàn trong cùng transaction.
-5. Tab cũ bị thu hồi phiên sẽ không tự tham gia lượt khách kế tiếp. Khách mới quét lại QR sẽ nhận phiên của lượt mới khi bàn được mở.
+5. Tab cũ bị thu hồi phiên sẽ không tự tham gia lượt khách kế tiếp. Sau thanh toán, khách mới quét QR sẽ tự mở lượt mới cho bàn trống; lượt cũ không được khôi phục.
+
+Vì quét QR tự mở bàn trống, bất kỳ ai trong mạng được phép có QR/URL đều có thể bắt đầu lượt bàn. Hãy chỉ cho phép mạng Wi-Fi đáng tin cậy.
 
 QR trên bàn cố định theo mã bàn; chỉ cần tạo/in lại khi thay địa chỉ máy chủ.
 

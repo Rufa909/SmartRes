@@ -5,6 +5,7 @@ coverage/
 .env
 .env.mysql.local
 .venv/
+*.egg-info/
 __pycache__/
 *.pyc
 .pytest_cache/

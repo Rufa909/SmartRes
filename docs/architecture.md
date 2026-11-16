@@ -9,7 +9,7 @@ SmartRes la he sinh thai nha hang tu phuc vu thong minh. He thong giam thao tac 
 ### Customer Web App
 
 - Khach quet Dynamic Table QR de mo web app theo `tableId`.
-- Xem menu, loc danh muc, tuy bien size/topping/ghi chu.
+- Xem menu, lọc danh mục, chọn khẩu phần/giá và món thêm/phụ thu riêng theo món từ `menu_item_options`, ghi chú từng món.
 - Chatbot nhan ngon ngu tu nhien va de xuat gio hang.
 - Goi mon va chon thanh toan VietQR/SEPay hoac tien mat.
 
@@ -60,7 +60,7 @@ Socket event du kien:
 - `POST /chatbot/parse-order`: boc tach cau nhap cua khach thanh cac item goi mon.
 - `POST /upsell/suggest`: goi y mon an kem/combo dua tren gio hang hien tai.
 
-Ban dau service tra ket qua rule-based de phat trien offline. Khi co API key LLM, thay logic trong `services/chatbot.py` va `services/upsell.py`.
+FastAPI có endpoint rule-based ban đầu và `POST /chatbot/recommend` dùng Gemini tùy chọn. Customer API đọc thực đơn đang bật bán từ MySQL, chuyển câu hỏi/menu qua AI Service; API đối chiếu ID model trả về với dữ liệu MySQL để đảm bảo tên/giá đúng. Khi thiếu key hoặc Gemini lỗi, Customer API dùng luật gợi ý cục bộ. Xem [hướng dẫn chatbot](chatbot-tu-van-mon.md).
 
 ## 5. Database
 

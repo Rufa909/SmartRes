@@ -28,6 +28,12 @@ export class OrderController {
     res.status(201).json({ order });
   };
 
+  listMine = async (req: Request, res: Response) => {
+    const tableCode = z.string().trim().min(1).max(32).parse(req.params.tableCode);
+    const result = await this.orderService.listForCustomerSession(tableCode, req.header('authorization')?.replace(/^Bearer /, ''));
+    res.json(result);
+  };
+
   updateStatus = async (req: Request, res: Response) => {
     const { status } = updateStatusSchema.parse(req.body);
     const orderId = String(req.params.id);

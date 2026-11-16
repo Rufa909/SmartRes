@@ -1,5 +1,20 @@
 # SmartRes
 
+## Menu khách và món bán chạy
+
+Trang khách quét QR đã có ảnh món tối ưu cho điện thoại và khu món bán chạy lấy từ
+hóa đơn đã thanh toán trong 30 ngày gần nhất. Khi chưa đủ dữ liệu, giao diện dùng
+nhãn gợi ý thay vì hiển thị thứ hạng giả. Xem [cách tính món bán chạy](docs/mon-ban-chay-trang-khach.md).
+
+Trang khách có chatbot tư vấn món từ thực đơn đang bán; khách có thể hỏi giá/khẩu vị
+và thêm gợi ý vào giỏ để tự xem lại trước khi gọi. Xem [hướng dẫn chatbot](docs/chatbot-tu-van-mon.md).
+
+Quản lý có thể cấu hình khẩu phần/giá riêng và món thêm/phụ thu theo từng món (ví dụ chỉ có Nhỏ/Vừa, thêm phô mai).
+Món cũ tự dùng một cỡ Tiêu chuẩn theo giá hiện tại; xem [hướng dẫn quản lý thực đơn](docs/quan-ly-thuc-don.md).
+
+Khách cũng có thể mở **Đơn của tôi** để theo dõi món và tiến độ bếp trong lượt bàn
+hiện tại. Xem [hướng dẫn đơn khách](docs/don-cua-toi-trang-khach.md).
+
 ## Tổng quan và doanh thu
 
 Tài khoản quản lý đã có dashboard doanh thu thực thu từ hóa đơn đã thanh toán,
@@ -16,9 +31,9 @@ và dùng tài khoản quản lý. Các phần quản lý bàn và tài khoản 
 ## Bảo vệ QR và chọn mạng Wi-Fi được phép
 
 Khách kết nối Wi-Fi và **quét QR để vào thẳng thực đơn, không nhập mã 6 số**.
-Phiên được cấp tự động cho bàn đã được nhân viên nhận khách. Thanh toán xong thì
-phiên hết hiệu lực. Người còn trong mạng được phép và biết QR vẫn có thể truy cập
-bàn đang mở; phiên không xác minh khách đang ngồi đúng bàn.
+Khi quét QR của bàn trống, hệ thống tự mở lượt phục vụ mới; bàn đang chờ thanh toán
+vẫn bị khóa. Thanh toán xong thì phiên cũ hết hiệu lực. Người trong mạng được phép
+và biết URL/QR có thể tự mở bàn trống, nên cần giới hạn mạng được phép.
 
 Sửa `.env.mysql.local` để chọn mạng, ví dụ `CUSTOMER_ALLOWED_CIDRS=192.168.1.0/24`;
 đổi mạng thì sửa dải IP và khởi động lại `npm run dev:customer`. Xem hướng dẫn đầy đủ

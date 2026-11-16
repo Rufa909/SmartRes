@@ -8,6 +8,11 @@ import { createOrderRouter } from "./routes/order.routes.js";
 import { db } from './infrastructure/database.js';
 import { CustomerAccessError } from './customer-sessions.js';
 import { createCustomerSessionsRouter } from './routes/customer-sessions.routes.js';
+import { readPopularItems } from './popular-items.js';
+import { createChatbotRouter } from './routes/chatbot.routes.js';
+import { MenuRepository } from './repositories/menu.repository.js';
+import { env } from './config/env.js';
+import { createCustomerSupportRouter } from './customer-support.js';
 import type {Pool} from 'mysql2/promise';
 
 export function createApp(database: Pool = db) {
@@ -24,8 +29,16 @@ export function createApp(database: Pool = db) {
   });
 
   app.use("/api/menu", createMenuRouter(container.menuController));
+  app.use("/api/chatbot", createChatbotRouter(new MenuRepository(database), env.AI_SERVICE_URL));
+  app.get('/api/popular-items', async (_req,res,next) => {
+    try {
+      res.set('Cache-Control','public, max-age=60, stale-while-revalidate=300');
+      res.json(await readPopularItems(database));
+    } catch (error) { next(error); }
+  });
   app.use("/api/orders", createOrderRouter(container.orderController));
   app.use('/api/customer-sessions',createCustomerSessionsRouter(database));
+  app.use('/api/customer-support',createCustomerSupportRouter(database));
   // Customer API không công khai API sửa trạng thái hoặc webhook thanh toán mẫu.
   app.use((_req,res) => {res.status(404).json({message:'Không tìm thấy API.'});});
 

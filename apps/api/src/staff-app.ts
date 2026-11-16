@@ -148,7 +148,7 @@ export function createStaffApp(db: Pool) {
   app.post('/api/staff/management/categories/:id',requireRole('manager'),route(async (req,res)=>{
     res.json(await saveCategory(db,currentUser(req),updateCategoryInput.parse(req.body),id.parse(req.params.id)));
   }));
-  app.get('/api/staff/snapshot', requireRole('staff','kitchen','manager'), route(async (_req,res) => {
+  app.get('/api/staff/snapshot', requireRole('staff','kitchen','manager','cashier'), route(async (_req,res) => {
     const c = await db.getConnection();
     try {
       await c.beginTransaction();
@@ -156,12 +156,25 @@ export function createStaffApp(db: Pool) {
       const [menu] = await c.query<RowDataPacket[]>(`SELECT m.id,m.name,m.description,m.emoji,m.image_url AS imageUrl,m.price,m.is_available AS available,c.name AS category
         FROM menu_items m JOIN categories c ON c.id=m.category_id ORDER BY c.sort_order,m.id`);
       const [items] = await c.query<RowDataPacket[]>(`SELECT i.id,t.code AS tableCode,i.item_name AS name,i.quantity,i.status,
-        i.unit_price AS unitPrice,i.note,o.order_code AS orderCode,o.created_at AS createdAt
+        i.unit_price AS unitPrice,i.note,o.customer_note AS customerNote,o.order_code AS orderCode,o.created_at AS createdAt
         FROM order_items i JOIN orders o ON o.id=i.order_id JOIN restaurant_tables t ON t.id=o.table_id
         WHERE o.status <> 'cancelled' AND o.payment_status='unpaid' ORDER BY i.id DESC`);
+      const [supportRequests]=await c.query<RowDataPacket[]>(`SELECT r.id,t.code AS tableCode,t.name AS tableName,r.requested_at AS requestedAt
+        FROM customer_service_requests r JOIN restaurant_tables t ON t.id=r.table_id
+        WHERE r.status='pending' ORDER BY r.requested_at,r.id`);
       await c.commit();
-      res.json({tables,menu:menu.map(m=>({...m,price:Number(m.price),available:Boolean(m.available)})),items});
+      res.json({tables,menu:menu.map(m=>({...m,price:Number(m.price),available:Boolean(m.available)})),items,supportRequests:supportRequests.map(request=>({...request,id:Number(request.id)}))});
     } catch(e) { await c.rollback(); throw e; } finally { c.release(); }
+  }));
+  app.post('/api/staff/support-requests/:id/acknowledge',requireRole('staff','manager','cashier'),route(async(req,res)=>{
+    const requestId=id.parse(req.params.id);
+    const [result]=await db.execute<ResultSetHeader>(`UPDATE customer_service_requests SET status='acknowledged',acknowledged_at=CURRENT_TIMESTAMP
+      WHERE id=? AND status='pending'`,[requestId]);
+    if(!result.affectedRows) {
+      const [existing]=await db.query<RowDataPacket[]>('SELECT id FROM customer_service_requests WHERE id=?',[requestId]);
+      if(!existing.length)throw new ApiError(404,'Không tìm thấy yêu cầu gọi nhân viên.');
+    }
+    res.json({ok:true});
   }));
   app.get('/api/staff/tables/:id/details', requireRole('staff','manager'), route(async (req,res) => {
     const c=await db.getConnection();
@@ -170,7 +183,7 @@ export function createStaffApp(db: Pool) {
       const [tables]=await c.query<RowDataPacket[]>('SELECT id,code,area,seats,guests,status FROM restaurant_tables WHERE id=? FOR UPDATE',[id.parse(req.params.id)]);
       if (!tables.length) throw new ApiError(404,'Không tìm thấy bàn.');
       const table=tables[0];
-      const [rows]=await c.query<RowDataPacket[]>(`SELECT i.id,i.item_name AS name,i.quantity,i.unit_price AS unitPrice,i.status,i.note,
+      const [rows]=await c.query<RowDataPacket[]>(`SELECT i.id,i.item_name AS name,i.quantity,i.unit_price AS unitPrice,i.status,i.note,o.customer_note AS customerNote,
         o.order_code AS orderCode,o.created_at AS createdAt FROM order_items i JOIN orders o ON o.id=i.order_id
         WHERE o.table_id=? AND o.payment_status='unpaid' AND o.status<>'cancelled' AND ? IN ('dining','waiting_payment')
         ORDER BY o.id,i.id`,[table.id,table.status]);

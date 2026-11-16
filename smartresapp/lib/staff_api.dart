@@ -86,6 +86,9 @@ class StaffApi {
   }
 
   Future<Map<String, dynamic>> snapshot() => request('snapshot');
+  Future<void> acknowledgeServiceRequest(int id) async {
+    await request('support-requests/$id/acknowledge', const {});
+  }
   Future<Map<String, dynamic>> managedMenu() => request('management/menu');
   Future<Map<String, dynamic>> managedUsers() => request('management/users');
   Future<Map<String, dynamic>> managedPromotions() =>

@@ -53,11 +53,27 @@ export async function joinDiningSession(db: Pool, tableCode: string) {
   try {
     await c.beginTransaction();
     const [tables] = await c.query<RowDataPacket[]>('SELECT id,status FROM restaurant_tables WHERE code=? FOR UPDATE', [tableCode]);
-    if (tables[0]?.status !== 'dining') throw new CustomerAccessError(403, 'Bàn chưa mở hoặc đang chờ thanh toán. Vui lòng liên hệ nhân viên.');
-    const [sessions] = await c.query<RowDataPacket[]>(`SELECT id
-      FROM dining_sessions WHERE table_id=? AND revoked_at IS NULL AND expires_at>NOW() ORDER BY created_at DESC LIMIT 1`, [tables[0].id]);
-    // Tự cấp phiên cho bàn đang phục vụ từ bản cũ hoặc khi phiên đã hết hạn.
-    const sessionId = sessions[0]?.id || (await openDiningSession(c,Number(tables[0].id),true)).sessionId;
+    if (!tables.length) throw new CustomerAccessError(404, 'Không tìm thấy bàn này.');
+    const table = tables[0];
+    if (table.status === 'waiting_payment') {
+      throw new CustomerAccessError(403, 'Bàn đang chờ thanh toán. Vui lòng liên hệ nhân viên.');
+    }
+    if (table.status === 'disabled') {
+      throw new CustomerAccessError(403, 'Bàn hiện tạm ngưng phục vụ. Vui lòng liên hệ nhân viên.');
+    }
+
+    let sessionId: string;
+    if (table.status === 'available') {
+      // QR bắt đầu lượt mới cho bàn trống sau khi khách tự ngồi vào bàn.
+      await c.execute(`UPDATE restaurant_tables
+        SET status='dining',guests=1,seated_at=CURRENT_TIMESTAMP WHERE id=? AND status='available'`, [table.id]);
+      sessionId = (await openDiningSession(c, Number(table.id))).sessionId;
+    } else {
+      const [sessions] = await c.query<RowDataPacket[]>(`SELECT id
+        FROM dining_sessions WHERE table_id=? AND revoked_at IS NULL AND expires_at>NOW() ORDER BY created_at DESC LIMIT 1`, [table.id]);
+      // Giữ nguyên lượt đang phục vụ; nếu hết hạn thì cấp lại phiên.
+      sessionId = sessions[0]?.id || (await openDiningSession(c,Number(table.id),true)).sessionId;
+    }
     const token = randomBytes(32).toString('hex');
     await c.execute('INSERT INTO customer_session_tokens(token_hash,session_id) VALUES(?,?)', [hashCustomerToken(token), sessionId]);
     await c.commit();

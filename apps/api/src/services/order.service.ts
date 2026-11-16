@@ -4,6 +4,10 @@ import { publishDomainEvent } from "../events/domain-events.js";
 export class OrderService {
   constructor(private readonly orderRepository: OrderRepository) {}
 
+  listForCustomerSession(tableCode: string, token?: string) {
+    return this.orderRepository.listForCustomerSession(tableCode, token);
+  }
+
   async createOrder(input: CreateOrderInput, token?: string) {
     if (input.items.length === 0) {
       throw new Error("Order must contain at least one item.");

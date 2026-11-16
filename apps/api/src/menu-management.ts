@@ -12,6 +12,8 @@ export const menuInput=z.object({
   name:z.string().trim().min(1).max(160),categoryId:z.number().int().positive(),
   price:z.number().int().min(0).max(999999999),description:z.string().trim().max(2000).default(''),
   emoji:z.string().trim().min(1).max(20).default('🍽️'),imageUrl:imageUrl.default(''),available:z.boolean(),
+  sizes:z.array(z.object({name:z.string().trim().min(1).max(40),price:z.number().int().min(0).max(999999999)})).min(1).max(6).optional(),
+  extras:z.array(z.object({name:z.string().trim().min(1).max(60),price:z.number().int().min(0).max(999999999)})).max(10).optional(),
 });
 export const categoryInput=z.object({name:z.string().trim().min(1).max(120),sortOrder:z.number().int().min(0).max(9999)});
 export const updateMenuInput=menuInput.extend({version});
@@ -34,8 +36,16 @@ async function transaction<T>(db:Pool,fn:(c:PoolConnection)=>Promise<T>) {
 export async function readManagedMenu(db:Pool) {
   return transaction(db,async c=>{
     const [items]=await c.query<RowDataPacket[]>(`SELECT ${fields} FROM menu_items ORDER BY category_id,id`);
+    const [sizeRows]=await c.query<RowDataPacket[]>(`SELECT menu_item_id AS menuItemId,option_name AS name,extra_price AS extraPrice
+      FROM menu_item_options WHERE group_name='Khẩu phần' ORDER BY id`);
+    const [extraRows]=await c.query<RowDataPacket[]>(`SELECT menu_item_id AS menuItemId,option_name AS name,extra_price AS price
+      FROM menu_item_options WHERE group_name='Món thêm' ORDER BY id`);
     const [categories]=await c.query<RowDataPacket[]>('SELECT id,name,sort_order AS sortOrder,version FROM categories ORDER BY sort_order,id');
-    return {items:items.map(normalize),categories:categories.map(r=>({...r,id:Number(r.id),sortOrder:Number(r.sortOrder),version:Number(r.version)}))};
+    const sizesByItem=new Map<number,Array<{name:string;price:number}>>();
+    for(const row of sizeRows) {const key=Number(row.menuItemId);const list=sizesByItem.get(key)??[];list.push({name:String(row.name),price:Number(items.find(item=>Number(item.id)===key)?.price??0)+Number(row.extraPrice)});sizesByItem.set(key,list);}
+    const extrasByItem=new Map<number,Array<{name:string;price:number}>>();
+    for(const row of extraRows) {const key=Number(row.menuItemId);const list=extrasByItem.get(key)??[];list.push({name:String(row.name),price:Number(row.price)});extrasByItem.set(key,list);}
+    return {items:items.map(row=>({...normalize(row),sizes:sizesByItem.get(Number(row.id))??[{name:'Tiêu chuẩn',price:Number(row.price)}],extras:extrasByItem.get(Number(row.id))??[]})),categories:categories.map(r=>({...r,id:Number(r.id),sortOrder:Number(r.sortOrder),version:Number(r.version)}))};
   });
 }
 
@@ -50,13 +60,24 @@ export async function saveMenuItem(db:Pool,actor:AuthUser,input:z.infer<typeof m
     }
     const [category]=await c.query<RowDataPacket[]>('SELECT id FROM categories WHERE id=? FOR SHARE',[input.categoryId]);
     if(!category.length)throw new MenuError(400,'Danh mục không tồn tại.');
-    const values=[input.categoryId,input.name,input.description||null,input.emoji,input.imageUrl||null,input.price,input.available?1:0];
+    const currentSizeRows=id===undefined?[]:(await c.query<RowDataPacket[]>(`SELECT option_name AS name,extra_price AS extraPrice FROM menu_item_options WHERE menu_item_id=? AND group_name='Khẩu phần' ORDER BY id`,[id]))[0];
+    const sizes=input.sizes??(currentSizeRows.length?currentSizeRows.map(row=>({name:String(row.name),price:Number(before?.price??input.price)+Number(row.extraPrice)})):[{name:'Tiêu chuẩn',price:input.price}]);
+    if(new Set(sizes.map(size=>size.name.toLocaleLowerCase('vi'))).size!==sizes.length)throw new MenuError(400,'Tên khẩu phần không được trùng.');
+    const currentExtras=id===undefined?[]:(await c.query<RowDataPacket[]>(`SELECT option_name AS name,extra_price AS price FROM menu_item_options WHERE menu_item_id=? AND group_name='Món thêm' ORDER BY id`,[id]))[0];
+    const extras=input.extras??currentExtras.map(row=>({name:String(row.name),price:Number(row.price)}));
+    if(new Set(extras.map(extra=>extra.name.toLocaleLowerCase('vi'))).size!==extras.length)throw new MenuError(400,'Tên món thêm không được trùng.');
+    const basePrice=Math.min(...sizes.map(size=>size.price));
+    const values=[input.categoryId,input.name,input.description||null,input.emoji,input.imageUrl||null,basePrice,input.available?1:0];
     if(id===undefined) {
       const [created]=await c.execute<ResultSetHeader>('INSERT INTO menu_items(category_id,name,description,emoji,image_url,price,is_available) VALUES(?,?,?,?,?,?,?)',values);
       id=created.insertId;
     } else await c.execute('UPDATE menu_items SET category_id=?,name=?,description=?,emoji=?,image_url=?,price=?,is_available=?,version=version+1 WHERE id=?',[...values,id]);
+    await c.execute(`DELETE FROM menu_item_options WHERE menu_item_id=? AND group_name='Khẩu phần'`,[id]);
+    for(const size of sizes) await c.execute(`INSERT INTO menu_item_options(menu_item_id,group_name,option_name,extra_price) VALUES(?,'Khẩu phần',?,?)`,[id,size.name,size.price-basePrice]);
+    await c.execute(`DELETE FROM menu_item_options WHERE menu_item_id=? AND group_name='Món thêm'`,[id]);
+    for(const extra of extras) await c.execute(`INSERT INTO menu_item_options(menu_item_id,group_name,option_name,extra_price) VALUES(?,'Món thêm',?,?)`,[id,extra.name,extra.price]);
     const [rows]=await c.query<RowDataPacket[]>(`SELECT ${fields} FROM menu_items WHERE id=?`,[id]);
-    const item=normalize(rows[0]);
+    const item={...normalize(rows[0]),sizes,extras};
     await audit(c,actor,before?'menu.update':'menu.create',id,before?normalize(before):null,item);
     return {item};
   });

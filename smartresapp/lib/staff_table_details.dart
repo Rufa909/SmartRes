@@ -192,6 +192,8 @@ class _StaffTableDetailsState extends State<StaffTableDetails> {
                             ),
                           ),
                           if (note.isNotEmpty) Text('Ghi chú: $note'),
+                          if ((item['customerNote'] as String? ?? '').trim().isNotEmpty)
+                            Text('Ghi chú đơn hàng: ${item['customerNote']}'),
                           if (item['orderCode'] != null)
                             Text(
                               'Đơn ${item['orderCode']}',

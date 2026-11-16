@@ -45,6 +45,8 @@ class _StaffPageState extends State<StaffPage> {
   String? alertMessage;
   String tableQuery = '';
   List<Map<String, dynamic>> tables = [], menu = [], items = [];
+  List<Map<String, dynamic>> supportRequests = [];
+  final Set<int> seenSupportRequestIds = {};
   List<Map<String, dynamic>> get ready =>
       items.where((i) => i['status'] == 'completed').toList();
 
@@ -95,11 +97,16 @@ class _StaffPageState extends State<StaffPage> {
       final data = await api.snapshot();
       if (!mounted) return;
       final nextItems = (data['items'] as List).cast<Map<String, dynamic>>();
+      final nextSupportRequests = ((data['supportRequests'] as List?) ?? const [])
+          .cast<Map<String, dynamic>>();
+      final newSupportRequests = nextSupportRequests.where((request) =>
+          seenSupportRequestIds.add((request['id'] as num).toInt())).toList();
       final newlyReady = readyTracker.update(nextItems);
       setState(() {
         tables = (data['tables'] as List).cast<Map<String, dynamic>>();
         menu = (data['menu'] as List).cast<Map<String, dynamic>>();
         items = nextItems;
+        supportRequests = nextSupportRequests;
         if (newlyReady.isNotEmpty) {
           alertMessage =
               'Bếp đã xong ${newlyReady.length} dòng món · Bàn ${newlyReady.map((i) => i['tableCode']).toSet().join(', ')}';
@@ -114,6 +121,7 @@ class _StaffPageState extends State<StaffPage> {
           );
         }
       }
+      if (newSupportRequests.isNotEmpty && soundEnabled) await alert.play();
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
     } finally {
@@ -142,6 +150,53 @@ class _StaffPageState extends State<StaffPage> {
   }
 
   Color statusColor(String s) => tableStatusColor(s);
+
+  Future<void> showServiceRequests() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Khách gọi nhân viên'),
+          content: SizedBox(
+            width: 420,
+            child: supportRequests.isEmpty
+                ? const Text('Hiện không có yêu cầu đang chờ.')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: supportRequests.length,
+                    separatorBuilder: (_, _) => const Divider(),
+                    itemBuilder: (_, index) {
+                      final request = supportRequests[index];
+                      final requestedAt = DateTime.tryParse(request['requestedAt'].toString());
+                      final time = requestedAt == null ? '' : '${requestedAt.hour.toString().padLeft(2, '0')}:${requestedAt.minute.toString().padLeft(2, '0')}';
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.room_service_outlined, color: staffGreen),
+                        title: Text('Bàn ${request['tableCode']} cần hỗ trợ'),
+                        subtitle: Text('Gọi lúc $time'),
+                        trailing: TextButton(
+                          onPressed: () async {
+                            try {
+                              await api.acknowledgeServiceRequest((request['id'] as num).toInt());
+                              await refresh();
+                              if (!mounted) return;
+                              setDialogState(() {});
+                              if (supportRequests.isEmpty) Navigator.pop(dialogContext);
+                            } catch (error) {
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+                            }
+                          },
+                          child: const Text('Đã nhận'),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Đóng'))],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => Theme(
@@ -214,11 +269,17 @@ class _StaffPageState extends State<StaffPage> {
             icon: const Icon(Icons.refresh),
           ),
           IconButton(
-            tooltip: 'Món chờ phục vụ',
-            onPressed: () => setState(() => tab = 1),
+            tooltip: 'Thông báo',
+            onPressed: () {
+              if (supportRequests.isNotEmpty) {
+                showServiceRequests();
+              } else {
+                setState(() => tab = 1);
+              }
+            },
             icon: Badge(
-              label: Text('${ready.length}'),
-              isLabelVisible: ready.isNotEmpty,
+              label: Text('${ready.length + supportRequests.length}'),
+              isLabelVisible: ready.isNotEmpty || supportRequests.isNotEmpty,
               child: const Icon(Icons.notifications_none),
             ),
           ),
@@ -227,6 +288,13 @@ class _StaffPageState extends State<StaffPage> {
       body: Column(
         children: [
           if (busy) const LinearProgressIndicator(),
+          if (supportRequests.isNotEmpty)
+            MaterialBanner(
+              backgroundColor: const Color(0xFFFFF1D9),
+              content: Text('Khách bàn ${supportRequests.map((request) => request['tableCode']).toSet().join(', ')} đang cần hỗ trợ.'),
+              leading: const Icon(Icons.room_service_outlined, color: brandOrange),
+              actions: [TextButton(onPressed: showServiceRequests, child: const Text('Xem yêu cầu'))],
+            ),
           if (alertMessage != null && ready.isNotEmpty)
             MaterialBanner(
               backgroundColor: const Color(0xFFFFEEE9),
@@ -651,7 +719,7 @@ class _StaffPageState extends State<StaffPage> {
                 'Bàn ${i['tableCode']} · ${i['name']} × ${i['quantity']}',
               ),
               subtitle: Text(
-                '${itemStatus(i['status'] as String)} · ${staffMoney(num.parse(i['unitPrice'].toString()) * (i['quantity'] as int))}',
+                '${itemStatus(i['status'] as String)} · ${staffMoney(num.parse(i['unitPrice'].toString()) * (i['quantity'] as int))}${(i['customerNote'] as String? ?? '').trim().isEmpty ? '' : ' · Ghi chú đơn: ${i['customerNote']}'}',
               ),
             ),
           ),

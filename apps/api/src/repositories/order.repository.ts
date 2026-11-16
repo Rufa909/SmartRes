@@ -32,6 +32,48 @@ interface MenuItemRow extends RowDataPacket {
 export class OrderRepository {
   constructor(private readonly database: Pool = db) {}
 
+  async listForCustomerSession(tableCode: string, token?: string) {
+    const c = await this.database.getConnection();
+    try {
+      const [tables] = await c.query<RowDataPacket[]>('SELECT id,status FROM restaurant_tables WHERE code=?', [tableCode]);
+      if (!tables.length) throw new CustomerAccessError(404, 'Không tìm thấy bàn này.');
+      const sessionId = await requireCustomerSession(c, Number(tables[0].id), token, true);
+      const [rows] = await c.query<RowDataPacket[]>(`SELECT o.order_code AS orderCode,o.status AS orderStatus,
+          o.payment_status AS paymentStatus,o.total_amount AS totalAmount,o.created_at AS createdAt,o.customer_note AS customerNote,
+          i.id AS itemId,i.item_name AS itemName,i.quantity,i.unit_price AS unitPrice,i.status AS itemStatus,i.note
+        FROM orders o LEFT JOIN order_items i ON i.order_id=o.id
+        WHERE o.dining_session_id=? ORDER BY o.id DESC,i.id ASC`, [sessionId]);
+
+      const orderMap = new Map<string, {
+        orderCode: string; status: string; paymentStatus: string; totalAmount: number; createdAt: Date | string; customerNote: string | null;
+        items: Array<{ id: number; name: string; quantity: number; unitPrice: number; status: string; note: string | null }>;
+      }>();
+      for (const row of rows) {
+        const orderCode = String(row.orderCode);
+        let order = orderMap.get(orderCode);
+        if (!order) {
+          order = {
+            orderCode,
+            status: String(row.orderStatus),
+            paymentStatus: String(row.paymentStatus),
+            totalAmount: Number(row.totalAmount),
+            createdAt: row.createdAt,
+            customerNote: row.customerNote === null ? null : String(row.customerNote),
+            items: [],
+          };
+          orderMap.set(orderCode, order);
+        }
+        if (row.itemId !== null) order.items.push({
+          id: Number(row.itemId), name: String(row.itemName), quantity: Number(row.quantity),
+          unitPrice: Number(row.unitPrice), status: String(row.itemStatus), note: row.note === null ? null : String(row.note),
+        });
+      }
+      return { tableStatus: String(tables[0].status), orders: [...orderMap.values()] };
+    } finally {
+      c.release();
+    }
+  }
+
   async requestPayment(orderCode: string, token?: string) {
     const c = await this.database.getConnection();
     try {
@@ -79,9 +121,28 @@ export class OrderRepository {
         if (!menuItem || !menuItem.is_available) {
           throw new Error("Một món đã hết hoặc không còn phục vụ. Vui lòng tải lại thực đơn.");
         }
-        const unitPrice = Number(menuItem.price);
+        const requestedSize=(item.options?.[0] as {size?:unknown}|undefined)?.size;
+        const requestedExtras=(item.options?.[0] as {extras?:unknown}|undefined)?.extras;
+        if(requestedExtras!==undefined&&(!Array.isArray(requestedExtras)||requestedExtras.some(extra=>typeof extra!=='string')||new Set(requestedExtras).size!==requestedExtras.length)) throw new Error(`Danh sách món thêm của ${menuItem.name} không hợp lệ.`);
+        const selectedExtras=(requestedExtras??[]) as string[];
+        const [availableOptions]=await connection.query<RowDataPacket[]>(`SELECT group_name AS groupName,option_name AS name,extra_price AS extraPrice
+          FROM menu_item_options WHERE menu_item_id=? AND group_name IN ('Khẩu phần','Món thêm') ORDER BY id`,[item.menuItemId]);
+        const availableSizes=availableOptions.filter(option=>option.groupName==='Khẩu phần');
+        const availableExtras=availableOptions.filter(option=>option.groupName==='Món thêm');
+        let unitPrice=Number(menuItem.price);
+        let selectedSizeName='';
+        if(availableSizes.length) {
+          const selected=availableSizes.find(size=>size.name===requestedSize);
+          if(!selected) throw new Error(`Vui lòng chọn khẩu phần đang bán cho món ${menuItem.name}.`);
+          unitPrice+=Number(selected.extraPrice);
+          selectedSizeName=String(selected.name);
+        }
+        const resolvedExtras=selectedExtras.map(name=>availableExtras.find(extra=>extra.name===name));
+        if(resolvedExtras.some(extra=>!extra))throw new Error(`Một món thêm của ${menuItem.name} không còn phục vụ. Vui lòng tải lại menu.`);
+        unitPrice+=resolvedExtras.reduce((sum,extra)=>sum+Number(extra!.extraPrice),0);
+        const orderNameParts=[selectedSizeName,...selectedExtras].filter(Boolean);
+        lines.push({ ...item, name: orderNameParts.length?`${menuItem.name} (${orderNameParts.join(', ')})`:menuItem.name, unitPrice });
         totalAmount += unitPrice * item.quantity;
-        lines.push({ ...item, name: menuItem.name, unitPrice });
       }
 
       const requestId = randomUUID();

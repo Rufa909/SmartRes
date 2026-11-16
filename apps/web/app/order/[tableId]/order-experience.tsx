@@ -8,7 +8,6 @@ import {
   Clock3,
   ConciergeBell,
   Minus,
-  MessageCircle,
   Plus,
   ReceiptText,
   Search,
@@ -21,6 +20,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CustomerAccess } from './customer-access';
+import { MenuChatbot } from './menu-chatbot';
+import { CustomerOrdersDialog } from './customer-orders-dialog';
 
 type MenuItem = {
   id: number;
@@ -32,23 +33,40 @@ type MenuItem = {
   color: string;
   symbol: string;
   imageUrl?: string | null;
+  sizes: Array<{ name: string; price: number }>;
+  extras: Array<{ name: string; price: number }>;
+};
+
+type MenuApiItem = {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number | string;
+  category: string;
+  emoji?: string | null;
+  imageUrl?: string | null;
+  sizes?: Array<{ name: string; price: number | string }>;
+  extras?: Array<{ name: string; price: number | string }>;
+};
+
+type PopularMenuItem = MenuItem & {
+  quantity: number;
+  invoiceCount: number;
 };
 
 type CartItem = {
   key: string;
   item: MenuItem;
-  size: "Nhỏ" | "Vừa" | "Lớn";
+  size: string;
   extras: string[];
   note: string;
   quantity: number;
   unitPrice: number;
 };
 
-// Các món hiện chưa cấu hình phụ thu theo size/topping trong database.
-const sizePrices = { Nhỏ: 0, Vừa: 0, Lớn: 0 } as const;
-const extraPrices: Record<string, number> = {};
 // Gọi cùng tên miền với trang web; Next.js sẽ proxy tới Customer API ở máy chủ.
 const apiBaseUrl = "/api/customer";
+const menuColors = ["#fff0eb", "#fff7da", "#edf8e8", "#fff0da", "#f3ebe6", "#f0edff"];
 
 const localMenuVisuals: Record<string, { imageUrl: string; description: string }> = {
   "Gỏi cuốn tôm": {
@@ -85,6 +103,10 @@ async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, ti
 
 function formatPrice(value: number) {
   return `${new Intl.NumberFormat("vi-VN").format(value)}đ`;
+}
+
+function formatMenuPrice(item: MenuItem) {
+  return item.sizes.length > 1 ? `Từ ${formatPrice(item.price)}` : formatPrice(item.price);
 }
 
 function formatTable(tableId: string) {
@@ -138,14 +160,17 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
   const [category, setCategory] = useState<string>("Tất cả");
   const [query, setQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [selectedSize, setSelectedSize] = useState<"Nhỏ" | "Vừa" | "Lớn">("Vừa");
+  const [selectedSize, setSelectedSize] = useState("");
   const [extras, setExtras] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [detailQuantity, setDetailQuantity] = useState(1);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [customerNote, setCustomerNote] = useState("");
   const [cartOpen, setCartOpen] = useState(false);
+  const [ordersOpen, setOrdersOpen] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [liveMenuItems, setLiveMenuItems] = useState<MenuItem[]>([]);
+  const [popularItems, setPopularItems] = useState<PopularMenuItem[]>([]);
   const [menuError, setMenuError] = useState<string | null>(null);
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -153,13 +178,32 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
   const [requestingPayment, setRequestingPayment] = useState(false);
   const [paymentRequested, setPaymentRequested] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [staffCallBusy, setStaffCallBusy] = useState(false);
+  const [staffCallSent, setStaffCallSent] = useState(false);
+  const [staffCallError, setStaffCallError] = useState<string | null>(null);
 
-  async function requestPayment() {
-    if (!orderCode || requestingPayment || paymentRequested) return;
+  async function requestStaff() {
+    if (staffCallBusy || staffCallSent) return;
+    if (!token) {setStaffCallError('Bàn chưa mở lượt phục vụ. Vui lòng báo nhân viên trực tiếp.');return;}
+    setStaffCallBusy(true);
+    setStaffCallError(null);
+    try {
+      const response=await fetchWithTimeout(`${apiBaseUrl}/customer-support/${encodeURIComponent(tableId)}/request`,{method:'POST',headers:{Authorization:`Bearer ${token}`}});
+      const data=await response.json() as {message?:string};
+      if(response.status===401){onExpired();return;}
+      if(!response.ok)throw new Error(data.message||'Chưa gửi được yêu cầu. Bạn thử lại nhé.');
+      setStaffCallSent(true);
+      window.setTimeout(()=>setStaffCallSent(false),45000);
+    } catch(error) {setStaffCallError(error instanceof Error?error.message:'Chưa gửi được yêu cầu. Bạn thử lại nhé.');}
+    finally {setStaffCallBusy(false);}
+  }
+
+  async function requestPayment(targetOrderCode = orderCode) {
+    if (!targetOrderCode || requestingPayment || paymentRequested) return;
     setRequestingPayment(true);
     setPaymentError(null);
     try {
-      const response = await fetchWithTimeout(`${apiBaseUrl}/orders/${encodeURIComponent(orderCode)}/request-payment`, { method: "POST", headers:{Authorization:`Bearer ${token}`} });
+      const response = await fetchWithTimeout(`${apiBaseUrl}/orders/${encodeURIComponent(targetOrderCode)}/request-payment`, { method: "POST", headers:{Authorization:`Bearer ${token}`} });
       const data = await response.json() as { message?: string };
       if (response.status===401) {onExpired();return;}
       if (!response.ok) throw new Error(data.message || "Không gửi được yêu cầu thanh toán.");
@@ -177,25 +221,36 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
     function reloadMenu() {
     if (fetching) return;
     fetching=true;
-    void fetchWithTimeout(`${apiBaseUrl}/menu`)
-      .then(async (response) => {
+    void Promise.all([
+      fetchWithTimeout(`${apiBaseUrl}/menu`),
+      fetchWithTimeout(`${apiBaseUrl}/popular-items`).catch(() => null),
+    ])
+      .then(async ([response, popularResponse]) => {
         if (!response.ok) throw new Error("Không tải được thực đơn.");
-        const data = await response.json() as { items: Array<{ id: number; name: string; description: string | null; price: number | string; category: string; emoji?: string | null; imageUrl?: string | null }> };
+        const data = await response.json() as { items: MenuApiItem[] };
         if (!cancelled) {
-          const colors = ["#fff0eb", "#fff7da", "#edf8e8", "#fff0da", "#f3ebe6", "#f0edff"];
-          setLiveMenuItems(data.items.map((item, index) => {
+          const toMenuItem = (item: MenuApiItem, index: number): MenuItem => {
             const localVisual = localMenuVisuals[item.name];
             return {
               id: item.id,
               name: item.name,
               description: item.description || localVisual?.description || "Món ăn được chuẩn bị tươi ngon tại nhà hàng.",
               price: Number(item.price),
+              sizes: item.sizes?.length ? item.sizes.map(size=>({name:size.name,price:Number(size.price)})) : [{name:"Tiêu chuẩn",price:Number(item.price)}],
+              extras: item.extras?.map(extra=>({name:extra.name,price:Number(extra.price)}))??[],
               category: item.category,
-              color: colors[index % colors.length],
+              color: menuColors[index % menuColors.length],
               symbol: item.emoji && item.emoji !== "?" ? item.emoji : "🍽️",
               imageUrl: item.imageUrl || localVisual?.imageUrl,
             };
-          }));
+          };
+          setLiveMenuItems(data.items.map(toMenuItem));
+          if (popularResponse?.ok) {
+            const popularData = await popularResponse.json() as {items:Array<MenuApiItem & {quantity:number;invoiceCount:number}>};
+            if (!cancelled) setPopularItems(popularData.items.map((item,index)=>({
+              ...toMenuItem(item,index),quantity:Number(item.quantity),invoiceCount:Number(item.invoiceCount),
+            })));
+          }
           setCategory(current=>current==='Tất cả' || data.items.some(i=>i.category===current)?current:'Tất cả');
           setMenuError(null);
         }
@@ -214,7 +269,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
   useEffect(()=>{
     setCart(current=>current.map(line=>{
       const updated=liveMenuItems.find(item=>item.id===line.item.id);
-      return updated ? {...line,item:updated,unitPrice:updated.price+sizePrices[line.size]+line.extras.reduce((sum,extra)=>sum+extraPrices[extra],0)} : line;
+      return updated ? {...line,item:updated,unitPrice:(updated.sizes.find(size=>size.name===line.size)?.price??updated.price)+line.extras.reduce((sum,extra)=>sum+(updated.extras.find(option=>option.name===extra)?.price??0),0)} : line;
     }));
   },[liveMenuItems]);
 
@@ -227,15 +282,18 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
     });
   }, [category, liveMenuItems, query]);
 
-  // Khu này dùng dữ liệu menu hiện có. Sau này thay bằng thứ hạng bán chạy từ API báo cáo.
-  const spotlightItems = useMemo(() => liveMenuItems.slice(0, 3), [liveMenuItems]);
+  const hasPopularRanking = popularItems.length > 0;
+  const spotlightItems = useMemo< Array<MenuItem & {quantity?:number;invoiceCount?:number}> >(
+    () => hasPopularRanking ? popularItems.slice(0, 5).map(item=>({...item,sizes:liveMenuItems.find(menuItem=>menuItem.id===item.id)?.sizes??item.sizes})) : liveMenuItems.slice(0, 3),
+    [hasPopularRanking, liveMenuItems, popularItems],
+  );
 
   const cartCount = cart.reduce((sum, cartItem) => sum + cartItem.quantity, 0);
   const subtotal = cart.reduce((sum, cartItem) => sum + cartItem.unitPrice * cartItem.quantity, 0);
 
   function openDetail(item: MenuItem) {
     setSelectedItem(item);
-    setSelectedSize("Vừa");
+    setSelectedSize(item.sizes.find(size=>size.name==="Vừa")?.name??item.sizes[0]?.name??"Tiêu chuẩn");
     setExtras([]);
     setNote("");
     setDetailQuantity(1);
@@ -243,8 +301,8 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
 
   function addSelectedItem() {
     if (!selectedItem) return;
-    const extraTotal = extras.reduce((sum, extra) => sum + extraPrices[extra], 0);
-    const unitPrice = selectedItem.price + sizePrices[selectedSize] + extraTotal;
+    const extraTotal = extras.reduce((sum, extra) => sum + (selectedItem.extras.find(option=>option.name===extra)?.price??0), 0);
+    const unitPrice = (selectedItem.sizes.find(size=>size.name===selectedSize)?.price??selectedItem.price) + extraTotal;
     const key = `${selectedItem.id}-${selectedSize}-${[...extras].sort().join("-")}-${note}`;
 
     setCart((current) => {
@@ -261,10 +319,23 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
     setCart((current) => quantity === 0 ? current.filter((cartItem) => cartItem.key !== key) : current.map((cartItem) => cartItem.key === key ? { ...cartItem, quantity } : cartItem));
   }
 
+  function addChatbotSuggestion(suggestion: {id:number}) {
+    const item = liveMenuItems.find((candidate) => candidate.id === suggestion.id);
+    if (!item) return false;
+    const selectedSize=item.sizes.find(size=>size.name==="Vừa")?.name??item.sizes[0]?.name??"Tiêu chuẩn";
+    const key = `${item.id}-${selectedSize}--`;
+    setCart((current) => {
+      const existing = current.find((line) => line.key === key);
+      if (existing) return current.map((line) => line.key === key ? { ...line, quantity: line.quantity + 1 } : line);
+      return [...current, { key, item, size: selectedSize, extras: [], note: "", quantity: 1, unitPrice: item.sizes.find(size=>size.name===selectedSize)?.price??item.price }];
+    });
+    return true;
+  }
+
   async function placeOrder() {
     if (!cart.length || isOrdering) return;
     if (!token) {setOrderError('Bàn chưa sẵn sàng gọi món. Vui lòng nhờ nhân viên nhận bàn và kiểm tra Wi-Fi nhà hàng.');return;}
-    if (menuError || cart.some(line=>!liveMenuItems.some(item=>item.id===line.item.id))) {setOrderError('Thực đơn đã thay đổi hoặc có món hết bán. Vui lòng kiểm tra lại giỏ hàng và kết nối.');return;}
+    if (menuError || cart.some(line=>{const current=liveMenuItems.find(item=>item.id===line.item.id);return !current||!current.sizes.some(size=>size.name===line.size)||line.extras.some(extra=>!current.extras.some(option=>option.name===extra));})) {setOrderError('Thực đơn, khẩu phần hoặc món thêm trong giỏ vừa thay đổi. Vui lòng kiểm tra lại trước khi gửi.');return;}
     setIsOrdering(true);
     setOrderError(null);
     try {
@@ -273,6 +344,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
         headers: { "Content-Type": "application/json", Authorization:`Bearer ${token}` },
         body: JSON.stringify({
           tableCode: tableId.toUpperCase(),
+          customerNote: customerNote.trim() || undefined,
           items: cart.map((item) => ({
             menuItemId: item.item.id,
             quantity: item.quantity,
@@ -285,6 +357,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
       if (response.status===401) {onExpired();return;}
       if (!response.ok) throw new Error(data.message || "Không thể gửi đơn. Vui lòng thử lại.");
       setOrderCode(data.order?.orderCode ?? null);
+      setCustomerNote("");
       setOrderPlaced(true);
       setCartOpen(false);
     } catch (error) {
@@ -294,7 +367,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
     }
   }
 
-  const selectedPrice = selectedItem ? selectedItem.price + sizePrices[selectedSize] + extras.reduce((sum, extra) => sum + extraPrices[extra], 0) : 0;
+  const selectedPrice = selectedItem ? (selectedItem.sizes.find(size=>size.name===selectedSize)?.price??selectedItem.price) + extras.reduce((sum, extra) => sum + (selectedItem.extras.find(option=>option.name===extra)?.price??0), 0) : 0;
 
   return (
     <main className="min-h-screen bg-[#f6f7fb] text-slate-950">
@@ -317,13 +390,14 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
               <span className="flex items-center gap-3"><ShoppingBag size={19} /> Giỏ hàng</span>
               {cartCount > 0 && <span className="rounded-full bg-coral px-2 py-0.5 text-xs text-white">{cartCount}</span>}
             </button>
-            <button className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-600 hover:bg-slate-100"><ReceiptText size={19} /> Đơn của tôi</button>
+            <button onClick={() => setOrdersOpen(true)} className="flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-semibold text-slate-600 hover:bg-slate-100"><ReceiptText size={19} /> Đơn của tôi</button>
           </nav>
 
           <div className="mt-auto rounded-3xl border border-coral/15 bg-[#fff7f4] p-4">
             <div className="flex items-center gap-2 font-bold"><ConciergeBell size={18} className="text-coral" /> Cần hỗ trợ?</div>
             <p className="mt-2 text-xs leading-5 text-slate-500">Gọi nhân viên đến bàn nếu bạn cần tư vấn hoặc thanh toán tiền mặt.</p>
-            <button className="mt-4 w-full rounded-xl border border-coral/25 bg-white py-2.5 text-sm font-bold text-coral">Gọi nhân viên</button>
+            <button onClick={requestStaff} disabled={staffCallBusy||staffCallSent} className="mt-4 w-full rounded-xl border border-coral/25 bg-white py-2.5 text-sm font-bold text-coral disabled:opacity-60">{staffCallBusy?"Đang gọi...":staffCallSent?"Đã báo nhân viên":"Gọi nhân viên"}</button>
+            {staffCallError&&<p role="alert" className="mt-2 text-xs text-red-700">{staffCallError}</p>}
           </div>
         </aside>
 
@@ -334,6 +408,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
                 <div className="grid h-10 w-10 place-items-center rounded-full bg-coral text-white xl:hidden"><UtensilsCrossed size={18} /></div>
                 <div><p className="text-lg font-black tracking-tight sm:text-xl">Thực đơn nhà hàng</p><p className="text-xs text-slate-500 xl:hidden">{tableName} · {token ? 'Đang phục vụ' : 'Xem thực đơn'}</p></div>
               </div>
+              <button onClick={requestStaff} disabled={staffCallBusy||staffCallSent} className="grid h-11 w-11 place-items-center rounded-full bg-coral/10 text-coral disabled:opacity-60 sm:hidden" aria-label={staffCallSent?"Đã báo nhân viên":"Gọi nhân viên"}><ConciergeBell size={20} /></button>
               <button onClick={() => setCartOpen(true)} className="relative grid h-11 w-11 place-items-center rounded-full bg-slate-100 text-slate-700 xl:hidden" aria-label="Mở giỏ hàng">
                 <ShoppingBag size={20} />
                 {cartCount > 0 && <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1 text-[10px] font-bold text-white">{cartCount}</span>}
@@ -343,6 +418,8 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
           </header>
 
           <div className="mx-auto max-w-5xl px-4 py-5 sm:px-7 xl:px-8 xl:py-7">
+            {staffCallSent&&<p role="status" className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">Đã gửi yêu cầu đến nhân viên bàn {tableName}.</p>}
+            {staffCallError&&<p role="alert" className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{staffCallError}</p>}
             <section className="relative min-h-[230px] overflow-hidden rounded-[28px] bg-[#201b18] text-white sm:min-h-[280px]">
               {spotlightItems[0]?.imageUrl && (
                 <img src={spotlightItems[0].imageUrl} alt="" className="absolute inset-y-0 right-0 h-full w-[64%] object-cover sm:w-[56%]" />
@@ -350,26 +427,17 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
               <div className="absolute inset-0 bg-gradient-to-r from-[#201b18] via-[#201b18]/95 to-[#201b18]/10" />
               <div className="absolute inset-0 bg-gradient-to-t from-[#201b18]/80 via-transparent to-transparent sm:hidden" />
               <div className="relative z-10 flex min-h-[230px] max-w-[72%] flex-col justify-center px-5 py-7 sm:min-h-[280px] sm:max-w-[58%] sm:px-9">
-                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-amber-200 backdrop-blur"><Sparkles size={14} /> Gợi ý hôm nay</span>
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-amber-200 backdrop-blur"><Sparkles size={14} /> {hasPopularRanking ? "Bán chạy 30 ngày" : "Gợi ý hôm nay"}</span>
                 <h1 className="mt-4 text-2xl font-black leading-[1.08] sm:text-4xl">Bữa ngon bắt đầu từ món bạn thích</h1>
                 <p className="mt-3 max-w-md text-xs leading-5 text-white/70 sm:text-sm sm:leading-6">Xem ảnh món thật, chọn khẩu phần và gửi yêu cầu trực tiếp đến bếp.</p>
                 <button type="button" onClick={() => document.getElementById("menu-list")?.scrollIntoView({ behavior: "smooth" })} className="mt-5 w-fit rounded-full bg-coral px-4 py-2.5 text-xs font-black shadow-lg shadow-coral/25">Xem thực đơn</button>
               </div>
             </section>
 
-            <section className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-orange-50 p-3.5 sm:p-4" aria-label="Tính năng sắp ra mắt">
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white text-coral shadow-sm"><MessageCircle size={21} /></div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-black text-slate-900">Trợ lý chọn món</p><span className="rounded-full bg-amber-200/70 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-900">Sắp ra mắt</span></div>
-                <p className="mt-0.5 text-xs leading-5 text-slate-600">Gợi ý món theo khẩu vị, số người và món đang có trong giỏ.</p>
-              </div>
-              <Sparkles className="hidden shrink-0 text-amber-500 sm:block" size={20} />
-            </section>
-
             {menuError && <p className="mt-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">{menuError}</p>}
             {orderCode && (
               <div className="mt-4 rounded-2xl border border-coral/20 bg-white p-4" aria-live="polite">
-                <button type="button" disabled={requestingPayment || paymentRequested} onClick={requestPayment} className="rounded-xl bg-coral px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+                <button type="button" disabled={requestingPayment || paymentRequested} onClick={() => requestPayment()} className="rounded-xl bg-coral px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
                   {paymentRequested ? "Đã gửi yêu cầu đến thu ngân" : requestingPayment ? "Đang gửi..." : "Yêu cầu thanh toán"}
                 </button>
                 {paymentRequested && <p className="mt-2 text-sm text-slate-600">Vui lòng chờ nhân viên kiểm tra hóa đơn và xác nhận phương thức thanh toán.</p>}
@@ -382,7 +450,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm món trong thực đơn" className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/10" />
               </label>
-              <button className="hidden h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 sm:inline-flex"><ConciergeBell size={18} /> Gọi nhân viên</button>
+              <button onClick={requestStaff} disabled={staffCallBusy||staffCallSent} className="hidden h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 disabled:opacity-60 sm:inline-flex"><ConciergeBell size={18} /> {staffCallBusy?"Đang gọi...":staffCallSent?"Đã báo nhân viên":"Gọi nhân viên"}</button>
             </div>
 
             <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1">
@@ -395,20 +463,23 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
               <section className="mt-7" aria-labelledby="spotlight-title">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-600"><TrendingUp size={14} /> Gợi ý nổi bật</p>
-                    <h2 id="spotlight-title" className="mt-1 text-xl font-black sm:text-2xl">Món đáng thử hôm nay</h2>
+                    <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-amber-600"><TrendingUp size={14} /> {hasPopularRanking ? "Bán chạy 30 ngày" : "Gợi ý nổi bật"}</p>
+                    <h2 id="spotlight-title" className="mt-1 text-xl font-black sm:text-2xl">{hasPopularRanking ? "Khách gọi nhiều nhất" : "Món đáng thử hôm nay"}</h2>
                   </div>
-                  <span className="text-xs text-slate-400">Vuốt để xem</span>
+                  <span className="text-xs text-slate-400">{hasPopularRanking ? "Từ hóa đơn đã thanh toán" : "Vuốt để xem"}</span>
                 </div>
                 <div className="no-scrollbar mt-3 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
                   {spotlightItems.map((item, index) => (
-                    <button key={item.id} type="button" onClick={() => openDetail(item)} className="group relative h-44 w-[78%] shrink-0 snap-start overflow-hidden rounded-[22px] bg-slate-900 text-left shadow-sm sm:w-72" aria-label={`Xem gợi ý ${item.name}`}>
+                    <button key={item.id} type="button" onClick={() => openDetail(liveMenuItems.find(menuItem=>menuItem.id===item.id)??item)} className="group relative h-44 w-[78%] shrink-0 snap-start overflow-hidden rounded-[22px] bg-slate-900 text-left shadow-sm sm:w-72" aria-label={`Xem gợi ý ${item.name}`}>
                       {item.imageUrl && <img src={item.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105" />}
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/15 to-transparent" />
                       <div className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-black text-slate-900 backdrop-blur"><Star size={11} className="fill-amber-400 text-amber-400" /> #{index + 1}</div>
                       <div className="absolute inset-x-0 bottom-0 p-4 text-white">
                         <p className="text-base font-black leading-tight">{item.name}</p>
-                        <p className="mt-1 text-sm font-bold text-amber-200">{formatPrice(item.price)}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <p className="text-sm font-bold text-amber-200">{formatMenuPrice(item)}</p>
+                          {hasPopularRanking && item.quantity !== undefined && <p className="text-[10px] font-semibold text-white/75">{item.quantity} phần · {item.invoiceCount} hóa đơn</p>}
+                        </div>
                       </div>
                     </button>
                   ))}
@@ -433,7 +504,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
                       </div>
                       <p className="mt-1.5 line-clamp-3 text-[11px] leading-[1.55] text-slate-500 sm:text-xs sm:leading-5 md:line-clamp-2">{item.description}</p>
                       <div className="mt-auto flex items-center justify-between pt-3">
-                        <span className="text-[15px] font-black text-coral sm:text-base">{formatPrice(item.price)}</span>
+                        <span className="text-[15px] font-black text-coral sm:text-base">{formatMenuPrice(item)}</span>
                         <button onClick={() => openDetail(item)} className="grid h-9 w-9 place-items-center rounded-full bg-coral text-white shadow-md shadow-coral/20 transition group-hover:scale-105" aria-label={`Thêm ${item.name}`}><Plus size={18} /></button>
                       </div>
                     </div>
@@ -447,15 +518,18 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
         </section>
 
         <aside className="hidden border-l border-slate-200 bg-white xl:block">
-          <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} isOrdering={isOrdering} orderError={orderError} />
+          <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} isOrdering={isOrdering} orderError={orderError} customerNote={customerNote} onCustomerNoteChange={setCustomerNote} />
         </aside>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto grid max-w-md grid-cols-3 border-t border-slate-200 bg-white/95 px-4 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl xl:hidden">
         <button className="flex flex-col items-center gap-1 py-1 text-[11px] font-bold text-coral"><UtensilsCrossed size={20} /> Thực đơn</button>
         <button onClick={() => setCartOpen(true)} className="relative flex flex-col items-center gap-1 py-1 text-[11px] font-semibold text-slate-500"><span className="relative"><ShoppingBag size={20} />{cartCount > 0 && <span className="absolute -right-3 -top-2 grid h-5 min-w-5 place-items-center rounded-full bg-coral px-1 text-[10px] font-bold text-white">{cartCount}</span>}</span>Giỏ hàng</button>
-        <button className="flex flex-col items-center gap-1 py-1 text-[11px] font-semibold text-slate-500"><ReceiptText size={20} /> Đơn của tôi</button>
+        <button onClick={() => setOrdersOpen(true)} className="flex flex-col items-center gap-1 py-1 text-[11px] font-semibold text-slate-500"><ReceiptText size={20} /> Đơn của tôi</button>
       </nav>
+
+      <MenuChatbot cartItemIds={cart.map((line) => line.item.id)} onAdd={addChatbotSuggestion} />
+      {ordersOpen && <CustomerOrdersDialog tableCode={tableId} token={token} onClose={() => setOrdersOpen(false)} onExpired={onExpired} onRequestPayment={requestPayment} requestingPayment={requestingPayment} paymentRequested={paymentRequested} paymentError={paymentError} />}
 
       {selectedItem && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/50 p-0 backdrop-blur-sm sm:items-center sm:p-6" role="dialog" aria-modal="true" aria-label={`Tùy chọn ${selectedItem.name}`}>
@@ -469,15 +543,15 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
                 <div><h2 className="text-2xl font-black">{selectedItem.name}</h2><p className="mt-2 text-sm leading-6 text-slate-500">{selectedItem.description}</p></div>
                 {selectedItem.badge && <span className="shrink-0 rounded-full bg-coral/10 px-3 py-1.5 text-xs font-bold text-coral">{selectedItem.badge}</span>}
               </div>
-              <p className="mt-3 text-xl font-black text-coral">{formatPrice(selectedItem.price)}</p>
+              <p className="mt-3 text-xl font-black text-coral">{formatMenuPrice(selectedItem)}</p>
 
               <div className="mt-6 border-t border-slate-100 pt-5">
-                <div className="flex justify-between"><h3 className="font-black">Chọn khẩu phần</h3><span className="text-xs font-bold text-coral">Bắt buộc</span></div>
+                <div className="flex justify-between"><h3 className="font-black">Khẩu phần</h3><span className="text-xs font-bold text-coral">{selectedItem.sizes.length > 1 ? "Chọn một cỡ" : "Một lựa chọn"}</span></div>
                 <div className="mt-3 grid grid-cols-3 gap-2">
-                  {(Object.keys(sizePrices) as Array<keyof typeof sizePrices>).map((size) => (
+                  {selectedItem.sizes.length === 1 ? <div className="col-span-3 flex items-center justify-between rounded-2xl border border-coral/30 bg-coral/5 p-3"><span className="text-sm font-black text-coral">{selectedItem.sizes[0].name}</span><span className="text-sm font-bold">{formatPrice(selectedItem.sizes[0].price)}</span></div> : selectedItem.sizes.map(({name:size,price}) => (
                     <button key={size} onClick={() => setSelectedSize(size)} className={`rounded-2xl border p-3 text-left transition ${selectedSize === size ? "border-coral bg-coral/5 ring-2 ring-coral/10" : "border-slate-200"}`}>
                       <span className={`block text-sm font-black ${selectedSize === size ? "text-coral" : ""}`}>{size}</span>
-                      <span className="mt-1 block text-[11px] text-slate-400">{sizePrices[size] === 0 ? formatPrice(selectedItem.price) : `${sizePrices[size] > 0 ? "+" : "−"}${formatPrice(Math.abs(sizePrices[size]))}`}</span>
+                      <span className="mt-1 block text-[11px] text-slate-400">{formatPrice(price)}</span>
                     </button>
                   ))}
                 </div>
@@ -485,8 +559,8 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
 
               <div className="mt-6">
                 <div className="flex justify-between"><h3 className="font-black">Món thêm</h3><span className="text-xs text-slate-400">Tùy chọn</span></div>
-                <div className="mt-2 space-y-1">
-                  {Object.entries(extraPrices).map(([extra, price]) => {
+                {selectedItem.extras.length ? <div className="mt-2 space-y-1">
+                  {selectedItem.extras.map(({name:extra,price}) => {
                     const checked = extras.includes(extra);
                     return (
                       <button key={extra} onClick={() => setExtras((current) => checked ? current.filter((value) => value !== extra) : [...current, extra])} className="flex w-full items-center justify-between rounded-xl px-1 py-3 text-sm">
@@ -495,7 +569,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
                       </button>
                     );
                   })}
-                </div>
+                </div> : <p className="mt-2 rounded-xl bg-slate-50 px-3 py-3 text-xs leading-5 text-slate-500">Món này chưa có lựa chọn thêm.</p>}
               </div>
 
               <label className="mt-5 block"><span className="font-black">Ghi chú cho bếp</span><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: không hành, ít cay..." className="mt-3 min-h-20 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm outline-none focus:border-coral" /></label>
@@ -509,7 +583,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
         <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-sm xl:hidden" role="dialog" aria-modal="true" aria-label="Giỏ hàng">
           <div className="ml-auto h-full w-full max-w-md overflow-y-auto bg-white shadow-2xl">
             <button onClick={() => setCartOpen(false)} className="absolute right-4 top-4 z-10 grid h-10 w-10 place-items-center rounded-full bg-slate-100" aria-label="Đóng giỏ hàng"><X size={18} /></button>
-            <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} isOrdering={isOrdering} orderError={orderError} />
+            <CartPanel tableName={tableName} cart={cart} subtotal={subtotal} onQuantityChange={updateCartQuantity} onOrder={placeOrder} isOrdering={isOrdering} orderError={orderError} customerNote={customerNote} onCustomerNoteChange={setCustomerNote} />
           </div>
         </div>
       )}
@@ -529,7 +603,7 @@ function ActiveOrderExperience({ tableId, token, onExpired }: { tableId: string;
   );
 }
 
-function CartPanel({ tableName, cart, subtotal, onQuantityChange, onOrder, isOrdering, orderError }: { tableName: string; cart: CartItem[]; subtotal: number; onQuantityChange: (key: string, quantity: number) => void; onOrder: () => void; isOrdering: boolean; orderError: string | null }) {
+function CartPanel({ tableName, cart, subtotal, onQuantityChange, onOrder, isOrdering, orderError, customerNote, onCustomerNoteChange }: { tableName: string; cart: CartItem[]; subtotal: number; onQuantityChange: (key: string, quantity: number) => void; onOrder: () => void; isOrdering: boolean; orderError: string | null; customerNote:string; onCustomerNoteChange:(note:string)=>void }) {
   return (
     <div className="sticky top-0 flex min-h-screen flex-col px-5 py-6">
       <div className="pr-12 xl:pr-0">
@@ -554,7 +628,7 @@ function CartPanel({ tableName, cart, subtotal, onQuantityChange, onOrder, isOrd
               </article>
             ))}
           </div>
-          <label className="mt-5 block"><span className="text-sm font-black">Ghi chú đơn hàng</span><textarea placeholder="Ví dụ: phục vụ món nóng trước" className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-coral" /></label>
+          <label className="mt-5 block"><span className="text-sm font-black">Ghi chú đơn hàng</span><textarea value={customerNote} onChange={event=>onCustomerNoteChange(event.target.value)} maxLength={1000} placeholder="Ví dụ: phục vụ món nóng trước" className="mt-2 min-h-20 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-coral" /><span className="mt-1 block text-right text-[11px] text-slate-400">{customerNote.length}/1000 · Gửi cùng đơn đến nhân viên</span></label>
           <div className="mt-5 rounded-2xl bg-slate-50 p-4">
             <div className="flex justify-between text-sm text-slate-500"><span>Tạm tính</span><span>{formatPrice(subtotal)}</span></div>
             <div className="mt-2 flex justify-between text-sm text-slate-500"><span>Phí phục vụ</span><span className="text-emerald-600">0đ</span></div>

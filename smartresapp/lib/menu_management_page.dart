@@ -353,7 +353,9 @@ class MenuItemEditor extends StatefulWidget {
 
 class _MenuItemEditorState extends State<MenuItemEditor> {
   final form = GlobalKey<FormState>();
-  late TextEditingController name, price, description, image, emoji;
+  late TextEditingController name, description, image, emoji;
+  late List<_MenuSizeControllers> sizes;
+  late List<_MenuSizeControllers> extras;
   late int categoryId;
   late bool available;
   bool saving = false;
@@ -363,14 +365,17 @@ class _MenuItemEditorState extends State<MenuItemEditor> {
     super.initState();
     final i = widget.item;
     name = TextEditingController(text: i?['name'] as String? ?? '');
-    price = TextEditingController(
-      text: i == null ? '' : (i['price'] as num).toInt().toString(),
-    );
     description = TextEditingController(
       text: i?['description'] as String? ?? '',
     );
     image = TextEditingController(text: i?['imageUrl'] as String? ?? '');
     emoji = TextEditingController(text: i?['emoji'] as String? ?? '🍽️');
+    final configuredSizes = (i?['sizes'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    sizes = configuredSizes.isEmpty
+        ? [_MenuSizeControllers('Tiêu chuẩn', i == null ? '' : (i['price'] as num).toInt().toString())]
+        : configuredSizes.map((size) => _MenuSizeControllers(size['name'] as String, (size['price'] as num).toInt().toString())).toList();
+    final configuredExtras = (i?['extras'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    extras = configuredExtras.map((extra) => _MenuSizeControllers(extra['name'] as String, (extra['price'] as num).toInt().toString())).toList();
     categoryId =
         i?['categoryId'] as int? ?? widget.categories.first['id'] as int;
     available = i?['available'] as bool? ?? true;
@@ -378,9 +383,11 @@ class _MenuItemEditorState extends State<MenuItemEditor> {
 
   @override
   void dispose() {
-    for (final c in [name, price, description, image, emoji]) {
+    for (final c in [name, description, image, emoji]) {
       c.dispose();
     }
+    for (final size in sizes) { size.name.dispose(); size.price.dispose(); }
+    for (final extra in extras) { extra.name.dispose(); extra.price.dispose(); }
     super.dispose();
   }
 
@@ -393,7 +400,9 @@ class _MenuItemEditorState extends State<MenuItemEditor> {
     try {
       await widget.api.saveMenuItem({
         'name': name.text.trim(),
-        'price': int.parse(price.text.trim()),
+        'price': sizes.map((size) => int.parse(size.price.text.trim())).reduce((a, b) => a < b ? a : b),
+        'sizes': sizes.map((size) => {'name': size.name.text.trim(), 'price': int.parse(size.price.text.trim())}).toList(),
+        'extras': extras.map((extra) => {'name': extra.name.text.trim(), 'price': int.parse(extra.price.text.trim())}).toList(),
         'description': description.text.trim(),
         'imageUrl': image.text.trim(),
         'emoji': emoji.text.trim(),
@@ -447,21 +456,45 @@ class _MenuItemEditorState extends State<MenuItemEditor> {
               onChanged: saving ? null : (v) => setState(() => categoryId = v!),
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: price,
-              enabled: !saving,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Giá bán (đồng)',
-                hintText: 'Ví dụ: 45000',
-              ),
-              validator: (v) {
-                final p = int.tryParse(v?.trim() ?? '');
-                return p == null || p < 0 || p > 999999999
-                    ? 'Nhập số nguyên từ 0 đến 999999999.'
-                    : null;
-              },
-            ),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Expanded(child: Text('Khẩu phần và giá', style: TextStyle(fontWeight: FontWeight.bold))),
+              TextButton.icon(onPressed: saving || sizes.length >= 6 ? null : () => setState(() => sizes.add(_MenuSizeControllers('', ''))), icon: const Icon(Icons.add), label: const Text('Thêm cỡ')),
+            ]),
+            Text('Chỉ thêm các cỡ món đang phục vụ. Giá thấp nhất sẽ hiện ở danh sách món.', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            ...sizes.asMap().entries.map((entry) {
+              final index = entry.key;
+              final size = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Expanded(child: TextFormField(controller: size.name, enabled: !saving, maxLength: 40, decoration: InputDecoration(labelText: 'Tên cỡ ${index + 1}', counterText: ''), validator: (value) => value == null || value.trim().isEmpty ? 'Nhập tên cỡ.' : null)),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextFormField(controller: size.price, enabled: !saving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Giá (đồng)'), validator: (value) { final price = int.tryParse(value?.trim() ?? ''); return price == null || price < 0 || price > 999999999 ? 'Nhập giá hợp lệ.' : null; })),
+                  IconButton(tooltip: 'Xóa cỡ', onPressed: saving || sizes.length <= 1 ? null : () { final removed = sizes.removeAt(index); removed.name.dispose(); removed.price.dispose(); setState(() {}); }, icon: const Icon(Icons.remove_circle_outline)),
+                ]),
+              );
+            }),
+            const SizedBox(height: 8),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const Expanded(child: Text('Món thêm gợi ý', style: TextStyle(fontWeight: FontWeight.bold))),
+              TextButton.icon(onPressed: saving || extras.length >= 10 ? null : () => setState(() => extras.add(_MenuSizeControllers('', ''))), icon: const Icon(Icons.add), label: const Text('Thêm món kèm')),
+            ]),
+            Text('Ví dụ: thêm phô mai, thêm trứng. Giá phụ thu sẽ được cộng vào đơn.', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 8),
+            ...extras.asMap().entries.map((entry) {
+              final index = entry.key;
+              final extra = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Expanded(child: TextFormField(controller: extra.name, enabled: !saving, maxLength: 60, decoration: InputDecoration(labelText: 'Món thêm ${index + 1}', counterText: ''), validator: (value) => value == null || value.trim().isEmpty ? 'Nhập tên món thêm.' : null)),
+                  const SizedBox(width: 8),
+                  Expanded(child: TextFormField(controller: extra.price, enabled: !saving, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Phụ thu (đồng)'), validator: (value) { final price = int.tryParse(value?.trim() ?? ''); return price == null || price < 0 || price > 999999999 ? 'Nhập phụ thu hợp lệ.' : null; })),
+                  IconButton(tooltip: 'Xóa món thêm', onPressed: saving ? null : () { final removed = extras.removeAt(index); removed.name.dispose(); removed.price.dispose(); setState(() {}); }, icon: const Icon(Icons.remove_circle_outline)),
+                ]),
+              );
+            }),
             const SizedBox(height: 16),
             TextFormField(
               controller: description,
@@ -533,6 +566,14 @@ class _MenuItemEditorState extends State<MenuItemEditor> {
       ),
     ),
   );
+}
+
+class _MenuSizeControllers {
+  final TextEditingController name;
+  final TextEditingController price;
+  _MenuSizeControllers(String initialName, String initialPrice)
+      : name = TextEditingController(text: initialName),
+        price = TextEditingController(text: initialPrice);
 }
 
 class CategoryEditor extends StatefulWidget {
