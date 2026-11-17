@@ -14,6 +14,8 @@ import {OrderService} from '../src/services/order.service.js';
 import {createOrderRouter} from '../src/routes/order.routes.js';
 import {ensureInvoiceStorage} from '../src/invoice-storage.js';
 import {ensureCustomerSessions,joinDiningSession} from '../src/customer-sessions.js';
+import {ensureMenuStorage} from '../src/menu-storage.js';
+import {ensureCustomerSupportStorage} from '../src/customer-support.js';
 dotenv.config({path:new URL('../../../.env.mysql.local',import.meta.url),quiet:true});
 dotenv.config({path:new URL('../../../.env',import.meta.url),quiet:true});
 
@@ -31,6 +33,8 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     await db.query('ALTER TABLE order_items DROP COLUMN note');
     await ensureInvoiceStorage(db);
     await ensureCustomerSessions(db);
+    await ensureMenuStorage(db);
+    await ensureCustomerSupportStorage(db);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['nhanvien','Nhân viên test','staff',hashPassword('Staff@123')]);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['bep','Bếp test','kitchen',hashPassword('Bep@12345')]);
     await db.execute('INSERT INTO users(username,display_name,role,password_hash) VALUES (?,?,?,?)', ['thungan','Thu ngân test','cashier',hashPassword('ThuNgan@123')]);

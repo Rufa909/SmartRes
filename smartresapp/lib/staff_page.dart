@@ -179,11 +179,12 @@ class _StaffPageState extends State<StaffPage> {
                             try {
                               await api.acknowledgeServiceRequest((request['id'] as num).toInt());
                               await refresh();
-                              if (!mounted) return;
+                              if (!mounted || !dialogContext.mounted) return;
                               setDialogState(() {});
                               if (supportRequests.isEmpty) Navigator.pop(dialogContext);
                             } catch (error) {
-                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+                              if (!dialogContext.mounted) return;
+                              ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(error.toString())));
                             }
                           },
                           child: const Text('Đã nhận'),
