@@ -44,6 +44,21 @@ try {
     ['Khoai tây chiên','Khai vị','🍟',30000,1,'Khoai chiên vàng giòn bên ngoài, mềm bùi bên trong, ăn kèm tương cà.','/menu/khoai-tay-chien.webp'],
     ['Trà đào cam sả','Đồ uống','🍑',25000,1,'Trà đào thanh mát với cam tươi và sả, cân bằng vị chua ngọt dễ uống.','/menu/tra-dao-cam-sa.webp'],
     ['Lẩu hải sản','Món chính','🍲',250000,0,'Lẩu hải sản nóng hổi với tôm, mực và rau tươi dùng chung tại bàn.',null],
+    ['Chả giò hải sản','Khai vị','🥟',49000,1,'Chả giò nhân tôm mực chiên vàng giòn, dùng cùng rau sống và nước mắm chua ngọt.','/menu/cha-gio-hai-san.webp'],
+    ['Salad bò nướng','Khai vị','🥗',69000,1,'Rau xanh tươi mát trộn cùng bò nướng mềm, cà chua, hành tây và đậu phộng rang.','/menu/salad-bo-nuong.webp'],
+    ['Cánh gà chiên mắm','Khai vị','🍗',65000,1,'Cánh gà chiên giòn áo sốt nước mắm tỏi đậm đà, thơm nhẹ vị ớt.','/menu/canh-ga-chien-mam.webp'],
+    ['Bò lúc lắc','Món chính','🥩',119000,1,'Bò cắt khối áp chảo mềm mọng cùng ớt chuông và hành tây, dùng kèm xà lách.','/menu/bo-luc-lac.webp'],
+    ['Gà nướng muối ớt','Món chính','🍗',109000,1,'Gà nướng da vàng giòn, thấm vị muối ớt cay nhẹ và thơm mùi than.','/menu/ga-nuong-muoi-ot.webp'],
+    ['Cá hồi áp chảo','Món chính','🐟',159000,1,'Cá hồi áp chảo vàng mặt, thịt mềm ẩm, ăn cùng rau củ và sốt bơ chanh.','/menu/ca-hoi-ap-chao.webp'],
+    ['Mì xào hải sản','Món chính','🍜',79000,1,'Mì xào săn sợi với tôm, mực và rau củ, nêm vừa vị và phục vụ nóng.','/menu/mi-xao-hai-san.webp'],
+    ['Cơm gà xối mỡ','Món chính','🍛',69000,1,'Cơm gà thơm dẻo dùng cùng đùi gà da giòn, dưa leo và cà chua tươi.','/menu/com-ga-xoi-mo.webp'],
+    ['Bún bò Nam Bộ','Món chính','🍜',75000,1,'Bún tươi trộn bò xào, rau thơm, giá, đậu phộng và hành phi cùng nước mắm chua ngọt.','/menu/bun-bo-nam-bo.webp'],
+    ['Lẩu Thái','Món chính','🍲',289000,1,'Nồi lẩu Thái chua cay với tôm, mực, nấm và rau tươi, phù hợp dùng chung 2–3 người.','/menu/lau-thai.webp'],
+    ['Nước chanh dây','Đồ uống','🥤',29000,1,'Chanh dây tươi pha chua ngọt cân bằng, thêm đá mát lạnh.','/menu/nuoc-chanh-day.webp'],
+    ['Soda chanh bạc hà','Đồ uống','🍋',35000,1,'Soda sủi bọt pha chanh tươi và bạc hà, thanh mát và dễ uống.','/menu/soda-chanh-bac-ha.webp'],
+    ['Cà phê sữa đá','Đồ uống','☕',29000,1,'Cà phê Việt đậm thơm hòa cùng sữa đặc và đá lạnh.','/menu/ca-phe-sua-da.webp'],
+    ['Nước ép dưa hấu','Đồ uống','🍉',32000,1,'Dưa hấu tươi ép nguyên vị, ngọt dịu và mát lành.','/menu/nuoc-ep-dua-hau.webp'],
+    ['Trà sữa trân châu đường đen','Đồ uống','🧋',45000,1,'Trà sữa béo thơm với trân châu dai mềm và sốt đường đen đậm vị.','/menu/tra-sua-tran-chau-duong-den.webp'],
   ];
   for (const [name,category,emoji,price,available,description,imageUrl] of dishes) {
     await c.execute(`INSERT INTO menu_items(name,category_id,emoji,price,is_available,description,image_url)
@@ -55,6 +70,6 @@ try {
       [name,emoji,price,available,description,imageUrl,category]);
   }
   await c.commit();
-  console.log('Database smartres_staff sẵn sàng: 8 bàn và 6 món khởi tạo. Không tạo đơn hàng giả.');
+  console.log('Database smartres_staff sẵn sàng: 8 bàn và 21 món khởi tạo. Không tạo đơn hàng giả.');
 } catch(e) { await c.rollback(); console.error('Không thể khởi tạo:', e.code ?? e.message); process.exitCode=1; }
 finally { await c.end(); }
