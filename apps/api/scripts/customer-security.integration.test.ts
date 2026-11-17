@@ -10,6 +10,7 @@ import {createApp} from '../src/app.js';
 import {createToken,hashPassword} from '../src/auth.js';
 import {ensureInvoiceStorage} from '../src/invoice-storage.js';
 import {ensureCustomerSessions,hashCustomerToken} from '../src/customer-sessions.js';
+import {ensureMenuStorage} from '../src/menu-storage.js';
 
 test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh toán và mở lượt mới',async()=>{
   const config={host:process.env.MYSQL_HOST,port:Number(process.env.MYSQL_PORT||3306),user:process.env.MYSQL_USER,password:process.env.MYSQL_PASSWORD};
@@ -26,6 +27,7 @@ test('Quét QR tự cấp phiên: bàn trống, sai bàn, hết hạn, thanh to�
       'kitchen-test','Kitchen test','kitchen',hashPassword('Kitchen@123'),
     ]);
     await ensureInvoiceStorage(db);
+    await ensureMenuStorage(db);
     await ensureCustomerSessions(db);
     await ensureCustomerSessions(db); // migration chạy lại không mất dữ liệu
     await db.query("INSERT INTO restaurant_tables(id,code,name,area) VALUES(1,'A01','A01','Test'),(2,'A02','A02','Test')");
