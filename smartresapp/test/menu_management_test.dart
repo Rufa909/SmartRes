@@ -110,10 +110,10 @@ void main() {
         ),
       );
       await enter(tester, 'Tên món', 'Cá kho');
-      await enter(tester, 'Giá bán (đồng)', '-10');
+      await enter(tester, 'Giá (đồng)', '-10');
       await save(tester, 'Lưu món');
       expect(calls, 0);
-      await enter(tester, 'Giá bán (đồng)', '89000');
+      await enter(tester, 'Giá (đồng)', '89000');
       await enter(tester, 'Mô tả', 'Ít cay');
       await save(tester, 'Lưu món');
       expect(calls, 1);
@@ -151,7 +151,7 @@ void main() {
           ),
         ),
       );
-      await enter(tester, 'Giá bán (đồng)', '55000');
+      await enter(tester, 'Giá (đồng)', '55000');
       await save(tester, 'Lưu món');
       expect(path, '/api/staff/management/menu/1');
       expect(sent!['version'], 7);
