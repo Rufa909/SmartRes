@@ -9,6 +9,11 @@ nhãn gợi ý thay vì hiển thị thứ hạng giả. Xem [cách tính món b
 Trang khách có chatbot tư vấn món từ thực đơn đang bán; khách có thể hỏi giá/khẩu vị
 và thêm gợi ý vào giỏ để tự xem lại trước khi gọi. Xem [hướng dẫn chatbot](docs/chatbot-tu-van-mon.md).
 
+Nhân viên cũng có **Trợ lý chọn món** trong màn gọi món cho bàn. Trợ lý dùng số khách,
+menu đang bán và các món đã có trong giỏ để gợi ý; nhân viên có thể thêm gợi ý thẳng
+vào giỏ trước khi gửi bếp. API này yêu cầu đăng nhập role `staff` hoặc `manager` và
+tự chuyển sang chế độ rule-based khi AI service chưa chạy.
+
 Quản lý có thể cấu hình khẩu phần/giá riêng và món thêm/phụ thu theo từng món (ví dụ chỉ có Nhỏ/Vừa, thêm phô mai).
 Món cũ tự dùng một cỡ Tiêu chuẩn theo giá hiện tại; xem [hướng dẫn quản lý thực đơn](docs/quan-ly-thuc-don.md).
 

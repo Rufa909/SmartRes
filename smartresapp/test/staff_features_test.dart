@@ -113,6 +113,66 @@ void main() {
     expect(find.text('70.000đ'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('Chatbot nhân viên gợi ý và thêm món vào giỏ', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Map<String, dynamic>? chatRequest;
+    final client = MockClient((request) async {
+      chatRequest = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        jsonEncode({
+          'reply': 'Cơm chiên hải sản phù hợp cho bàn này.',
+          'provider': 'rule-based',
+          'suggestions': [
+            {
+              'id': 1,
+              'name': 'Cơm chiên hải sản',
+              'price': 45000,
+              'description': 'Cơm chiên cùng tôm và mực.',
+              'reason': 'Món dễ ăn',
+            },
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json; charset=utf-8'},
+      );
+    });
+    addTearDown(client.close);
+    final api = StaffApi(client: client)..token = 'staff-token';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrderSheet(
+          table: const {'id': 1, 'code': 'A01', 'guests': 2},
+          menu: const [
+            {
+              'id': 1,
+              'name': 'Cơm chiên hải sản',
+              'price': 45000,
+              'available': true,
+              'category': 'Món chính',
+            },
+          ],
+          api: api,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Mở trợ lý chọn món'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Món nào dễ ăn?'));
+    await tester.pumpAndSettle();
+    expect(chatRequest?['partySize'], 2);
+    expect(chatRequest?['cartItemIds'], isEmpty);
+    expect(find.text('Cơm chiên hải sản phù hợp cho bàn này.'), findsOneWidget);
+    await tester.tap(find.text('Thêm vào giỏ'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Đã thêm Cơm chiên hải sản'), findsOneWidget);
+    await tester.tap(find.byTooltip('Đóng trợ lý'));
+    await tester.pumpAndSettle();
+    expect(find.text('Đã chọn (1)'), findsOneWidget);
+    expect(find.text('45.000đ'), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Món hoàn thành gọi âm thanh một lần qua nhiều lần tải', (
     tester,
   ) async {

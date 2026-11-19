@@ -60,6 +60,13 @@ test('MySQL: nhận bàn, giá server, chống trùng, phục vụ và dữ li�
     const kitchenLogin=await fetch(`${base.replace('/api/staff','')}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'bep',password:'Bep@12345'})});
     const kitchenToken=(await kitchenLogin.json() as {token:string}).token;
     const kitchenPost=(path:string,body:unknown)=>fetch(`${base}/${path}`,{method:'POST',headers:{'Authorization':`Bearer ${kitchenToken}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const chatResponse=await post('chatbot/message',{message:'Cơm giá bao nhiêu?',cartItemIds:[],partySize:2});
+    assert.equal(chatResponse.status,200);
+    const chat=await chatResponse.json() as {reply:string;suggestions:Array<{id:number}>;provider:string};
+    assert.ok(chat.reply.length>0);
+    assert.ok(['gemini','rule-based'].includes(chat.provider));
+    assert.ok(chat.suggestions.every(item=>item.id!==3));
+    assert.equal((await kitchenPost('chatbot/message',{message:'Gợi ý món'})).status,403);
     const cashierLogin=await fetch(`${base.replace('/api/staff','')}/api/auth/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'thungan',password:'ThuNgan@123'})});
     assert.equal(cashierLogin.status,200);
     const cashierToken=(await cashierLogin.json() as {token:string}).token;

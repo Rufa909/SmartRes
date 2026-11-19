@@ -10,6 +10,7 @@ import 'ready_alert.dart';
 import 'cashier_page.dart';
 import 'table_status.dart';
 import 'staff_table_details.dart';
+import 'staff_menu_chatbot.dart';
 
 import 'package:flutter/services.dart';
 
@@ -97,10 +98,15 @@ class _StaffPageState extends State<StaffPage> {
       final data = await api.snapshot();
       if (!mounted) return;
       final nextItems = (data['items'] as List).cast<Map<String, dynamic>>();
-      final nextSupportRequests = ((data['supportRequests'] as List?) ?? const [])
-          .cast<Map<String, dynamic>>();
-      final newSupportRequests = nextSupportRequests.where((request) =>
-          seenSupportRequestIds.add((request['id'] as num).toInt())).toList();
+      final nextSupportRequests =
+          ((data['supportRequests'] as List?) ?? const [])
+              .cast<Map<String, dynamic>>();
+      final newSupportRequests = nextSupportRequests
+          .where(
+            (request) =>
+                seenSupportRequestIds.add((request['id'] as num).toInt()),
+          )
+          .toList();
       final newlyReady = readyTracker.update(nextItems);
       setState(() {
         tables = (data['tables'] as List).cast<Map<String, dynamic>>();
@@ -167,24 +173,37 @@ class _StaffPageState extends State<StaffPage> {
                     separatorBuilder: (_, _) => const Divider(),
                     itemBuilder: (_, index) {
                       final request = supportRequests[index];
-                      final requestedAt = DateTime.tryParse(request['requestedAt'].toString());
-                      final time = requestedAt == null ? '' : '${requestedAt.hour.toString().padLeft(2, '0')}:${requestedAt.minute.toString().padLeft(2, '0')}';
+                      final requestedAt = DateTime.tryParse(
+                        request['requestedAt'].toString(),
+                      );
+                      final time = requestedAt == null
+                          ? ''
+                          : '${requestedAt.hour.toString().padLeft(2, '0')}:${requestedAt.minute.toString().padLeft(2, '0')}';
                       return ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: const Icon(Icons.room_service_outlined, color: staffGreen),
+                        leading: const Icon(
+                          Icons.room_service_outlined,
+                          color: staffGreen,
+                        ),
                         title: Text('Bàn ${request['tableCode']} cần hỗ trợ'),
                         subtitle: Text('Gọi lúc $time'),
                         trailing: TextButton(
                           onPressed: () async {
                             try {
-                              await api.acknowledgeServiceRequest((request['id'] as num).toInt());
+                              await api.acknowledgeServiceRequest(
+                                (request['id'] as num).toInt(),
+                              );
                               await refresh();
                               if (!mounted || !dialogContext.mounted) return;
                               setDialogState(() {});
-                              if (supportRequests.isEmpty) Navigator.pop(dialogContext);
+                              if (supportRequests.isEmpty) {
+                                Navigator.pop(dialogContext);
+                              }
                             } catch (error) {
                               if (!dialogContext.mounted) return;
-                              ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text(error.toString())));
+                              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                SnackBar(content: Text(error.toString())),
+                              );
                             }
                           },
                           child: const Text('Đã nhận'),
@@ -193,7 +212,12 @@ class _StaffPageState extends State<StaffPage> {
                     },
                   ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Đóng'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Đóng'),
+            ),
+          ],
         ),
       ),
     );
@@ -292,9 +316,19 @@ class _StaffPageState extends State<StaffPage> {
           if (supportRequests.isNotEmpty)
             MaterialBanner(
               backgroundColor: const Color(0xFFFFF1D9),
-              content: Text('Khách bàn ${supportRequests.map((request) => request['tableCode']).toSet().join(', ')} đang cần hỗ trợ.'),
-              leading: const Icon(Icons.room_service_outlined, color: brandOrange),
-              actions: [TextButton(onPressed: showServiceRequests, child: const Text('Xem yêu cầu'))],
+              content: Text(
+                'Khách bàn ${supportRequests.map((request) => request['tableCode']).toSet().join(', ')} đang cần hỗ trợ.',
+              ),
+              leading: const Icon(
+                Icons.room_service_outlined,
+                color: brandOrange,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: showServiceRequests,
+                  child: const Text('Xem yêu cầu'),
+                ),
+              ],
             ),
           if (alertMessage != null && ready.isNotEmpty)
             MaterialBanner(
@@ -847,6 +881,19 @@ class _OrderSheetState extends State<OrderSheet> {
     }
   }
 
+  Future<void> openChatbot() => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: false,
+    builder: (_) => StaffMenuChatbot(
+      api: widget.api,
+      table: widget.table,
+      menu: widget.menu,
+      cart: cart,
+      onAdd: (id) => change(id, 1),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => PopScope(
     canPop: !sending,
@@ -859,6 +906,7 @@ class _OrderSheetState extends State<OrderSheet> {
       total: total,
       change: change,
       send: send,
+      openChatbot: openChatbot,
     ),
   );
 }

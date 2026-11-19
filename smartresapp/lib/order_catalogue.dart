@@ -12,6 +12,7 @@ class OrderCatalogue extends StatefulWidget {
   final num total;
   final void Function(int, int) change;
   final VoidCallback send;
+  final VoidCallback? openChatbot;
   const OrderCatalogue({
     super.key,
     required this.table,
@@ -21,6 +22,7 @@ class OrderCatalogue extends StatefulWidget {
     required this.total,
     required this.change,
     required this.send,
+    this.openChatbot,
     this.error,
   });
   @override
@@ -71,6 +73,14 @@ class _OrderCatalogueState extends State<OrderCatalogue> {
               ),
             ],
           ),
+          actions: [
+            if (widget.openChatbot != null)
+              IconButton(
+                tooltip: 'Mở trợ lý chọn món',
+                onPressed: widget.sending ? null : widget.openChatbot,
+                icon: const Icon(Icons.auto_awesome_outlined),
+              ),
+          ],
         ),
         body: SafeArea(
           child: Column(

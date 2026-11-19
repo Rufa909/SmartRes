@@ -14,6 +14,9 @@ import {readItemTimings} from './item-timing.js';
 import {PromotionError,promotionInput,readPromotions,readPromotion,savePromotion,togglePromotion,evaluatePromotion} from './promotions.js';
 import {DiscountCodeError,discountCodeInput,discountCodeText,readDiscountCodes,saveDiscountCode,toggleDiscountCode,findDiscountCode,validateDiscountCode,lockInvoiceDiscountCode,redeemInvoiceDiscountCode} from './discount-codes.js';
 import {UserManagementError,createUserInput,updateUserInput,resetPasswordInput,deleteUserInput,readEmployees,createEmployee,updateEmployee,resetEmployeePassword,deleteEmployee} from './user-management.js';
+import {createChatbotRouter} from './routes/chatbot.routes.js';
+import {MenuRepository} from './repositories/menu.repository.js';
+import {env} from './config/env.js';
 
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 const id = z.coerce.number().int().positive();
@@ -50,6 +53,7 @@ export function createStaffApp(db: Pool) {
     const user = {id:Number(rows[0].id),username:rows[0].username,displayName:rows[0].displayName,role:rows[0].role as Role,sessionVersion:Number(rows[0].sessionVersion)};
     res.json({token:createToken(user),user});
   }));
+  app.use('/api/staff/chatbot', requireRole('staff','manager'), createChatbotRouter(new MenuRepository(db),env.AI_SERVICE_URL));
   app.get(['/api/staff/management/discounts','/api/v1/manager/discounts'],requireRole('manager'),route(async (_req,res)=>{
     res.set('Cache-Control','no-store').json(await readDiscountCodes(db));
   }));
